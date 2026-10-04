@@ -1,0 +1,19 @@
+# Build/runtime artifacts
+/bin/
+/dist/
+*.exe
+*.test
+coverage.out
+*.prof
+# Local secrets and temporary captures
+.env
+.env.*
+!.env.example
+/local-captures/
+/local-state/
+*.log
+# Personal agent settings: installer merges these locally; do not commit by default
+.gemini/settings.json
+# OS files
+.DS_Store
+Thumbs.db

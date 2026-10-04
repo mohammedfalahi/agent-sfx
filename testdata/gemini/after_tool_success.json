@@ -1,0 +1,15 @@
+{
+  "session_id": "test-session-123",
+  "transcript_path": "/tmp/transcript.json",
+  "cwd": "/workspace",
+  "hook_event_name": "AfterTool",
+  "timestamp": "2026-10-04T12:00:04Z",
+  "tool_name": "run_shell_command",
+  "tool_input": {
+    "command": "make test"
+  },
+  "tool_response": {
+    "llmContent": "PASS",
+    "returnDisplay": "PASS: 10 tests passed"
+  }
+}

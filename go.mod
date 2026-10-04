@@ -1,0 +1,3 @@
+module agent-sfx
+
+go 1.27.1

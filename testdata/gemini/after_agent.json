@@ -1,0 +1,10 @@
+{
+  "session_id": "test-session-123",
+  "transcript_path": "/tmp/transcript.json",
+  "cwd": "/workspace",
+  "hook_event_name": "AfterAgent",
+  "timestamp": "2026-10-04T12:00:05Z",
+  "prompt": "Run tests",
+  "prompt_response": "All tests passed",
+  "stop_hook_active": false
+}

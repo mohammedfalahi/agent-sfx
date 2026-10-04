@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session-123",
+  "transcript_path": "/tmp/transcript.json",
+  "cwd": "/workspace",
+  "hook_event_name": "BeforeAgent",
+  "timestamp": "2026-10-04T12:00:00Z",
+  "prompt": "Run tests"
+}

@@ -1,0 +1,8 @@
+{
+  "session_id": "test-session-123",
+  "transcript_path": "/tmp/transcript.json",
+  "cwd": "/workspace",
+  "hook_event_name": "SessionStart",
+  "timestamp": "2026-10-04T11:59:59Z",
+  "source": "startup"
+}
