@@ -30,7 +30,7 @@ type OwnedHook struct {
 	Description string
 }
 
-// AllOwnedHooks lists the five hooks managed by Agent SFX in Milestone M2.
+// AllOwnedHooks lists the hooks managed by Agent SFX.
 // SessionStart uses wildcard matcher "" to cover startup, resume, and clear sources.
 var AllOwnedHooks = []OwnedHook{
 	{
@@ -58,10 +58,16 @@ var AllOwnedHooks = []OwnedHook{
 		Description: "Agent SFX: permission_requested sound event",
 	},
 	{
+		EventName:   "BeforeTool",
+		Matcher:     "^ask_user$",
+		HookName:    "agent-sfx-before-tool-ask-user",
+		Description: "Agent SFX: waiting_for_user sound event",
+	},
+	{
 		EventName:   "AfterTool",
 		Matcher:     "",
 		HookName:    "agent-sfx-after-tool",
-		Description: "Agent SFX: tool error sound event",
+		Description: "Agent SFX: tool error and test-pass sound events",
 	},
 }
 
@@ -261,7 +267,7 @@ func PlanUninstall(scope Scope, settingsPath, binaryPath string) (*DryRunResult,
 		SettingsPath: settingsPath,
 	}
 
-	// Exact 5 owned hook names
+	// Exact owned hook names
 	ownedMap := make(map[string]bool)
 	for _, o := range AllOwnedHooks {
 		ownedMap[o.HookName] = true

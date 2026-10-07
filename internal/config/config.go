@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -133,4 +134,106 @@ func Load(customPath string) (Config, string, error) {
 	}
 
 	return cfg, targetPath, nil
+}
+
+// SetEnabled updates the "enabled" field in the configuration file atomically.
+// It acquires an exclusive file lock, validates existing config to prevent
+// overwriting invalid files, and decodes with UseNumber() to preserve all
+// unknown fields, comments, custom paths, and exact numeric precision.
+// If the config file does not exist, a default config is created with the requested state.
+func SetEnabled(customPath string, enabled bool) (string, error) {
+	var targetPath string
+	if customPath != "" {
+		targetPath = customPath
+	} else {
+		defPath, err := DefaultConfigPath()
+		if err != nil {
+			return "", err
+		}
+		targetPath = defPath
+	}
+
+	dir := filepath.Dir(targetPath)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return targetPath, fmt.Errorf("failed to create config directory %s: %w", dir, err)
+	}
+
+	lockPath := filepath.Join(dir, "config.json.lock")
+	lock, err := acquireFileLock(lockPath)
+	if err != nil {
+		return targetPath, fmt.Errorf("failed to acquire config lock: %w", err)
+	}
+	defer lock.release()
+
+	var raw map[string]any
+	data, err := os.ReadFile(targetPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return targetPath, fmt.Errorf("failed to read config file at %s: %w", targetPath, err)
+		}
+		// File does not exist: initialize from default config
+		defCfg := DefaultConfig()
+		defCfg.Enabled = enabled
+		defBytes, err := json.Marshal(defCfg)
+		if err != nil {
+			return targetPath, fmt.Errorf("failed to marshal default config: %w", err)
+		}
+		dec := json.NewDecoder(bytes.NewReader(defBytes))
+		dec.UseNumber()
+		if err := dec.Decode(&raw); err != nil {
+			return targetPath, fmt.Errorf("failed to decode default config map: %w", err)
+		}
+	} else {
+		// Existing file: validate it first!
+		var checkCfg Config
+		if err := json.Unmarshal(data, &checkCfg); err != nil {
+			return targetPath, fmt.Errorf("refusing to update invalid config JSON at %s: %w", targetPath, err)
+		}
+		if err := checkCfg.Validate(); err != nil {
+			return targetPath, fmt.Errorf("refusing to update invalid config at %s: %w", targetPath, err)
+		}
+
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.UseNumber()
+		if err := dec.Decode(&raw); err != nil {
+			return targetPath, fmt.Errorf("failed to parse existing config JSON at %s: %w", targetPath, err)
+		}
+	}
+
+	// Update only the enabled field
+	raw["enabled"] = enabled
+
+	out, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return targetPath, fmt.Errorf("failed to marshal updated config: %w", err)
+	}
+	out = append(out, '\n')
+
+	// Write to temporary file in same directory, flush, and atomically rename
+	tmpFile, err := os.CreateTemp(dir, "config-*.tmp")
+	if err != nil {
+		return targetPath, fmt.Errorf("failed to create temp config file: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(tmpName) // safe cleanup if rename didn't happen
+	}()
+
+	if _, err := tmpFile.Write(out); err != nil {
+		_ = tmpFile.Close()
+		return targetPath, fmt.Errorf("failed to write temp config file: %w", err)
+	}
+	if err := tmpFile.Sync(); err != nil {
+		_ = tmpFile.Close()
+		return targetPath, fmt.Errorf("failed to sync temp config file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return targetPath, fmt.Errorf("failed to close temp config file: %w", err)
+	}
+
+	if err := os.Rename(tmpName, targetPath); err != nil {
+		return targetPath, fmt.Errorf("failed to atomically update config file: %w", err)
+	}
+
+	return targetPath, nil
 }

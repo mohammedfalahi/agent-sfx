@@ -23,9 +23,11 @@ var (
 type MessageType string
 
 const (
-	TypeEvent  MessageType = "event"
-	TypeStop   MessageType = "stop"
-	TypeStatus MessageType = "status"
+	TypeEvent   MessageType = "event"
+	TypeStop    MessageType = "stop"
+	TypeStatus  MessageType = "status"
+	TypeEnable  MessageType = "enable"
+	TypeDisable MessageType = "disable"
 )
 
 // Request is sent from clients (hook or CLI) to the background worker.
@@ -43,6 +45,7 @@ type Response struct {
 	PID     int    `json:"pid,omitempty"`
 	Uptime  int64  `json:"uptime_sec,omitempty"`
 	Playing bool   `json:"playing,omitempty"`
+	Enabled bool   `json:"enabled,omitempty"`
 }
 
 // Validate checks request invariants.
@@ -56,7 +59,7 @@ func (r *Request) Validate() error {
 			return errors.New("event payload missing for event request")
 		}
 		return r.Event.Validate()
-	case TypeStop, TypeStatus:
+	case TypeStop, TypeStatus, TypeEnable, TypeDisable:
 		return nil
 	default:
 		return fmt.Errorf("unknown ipc request type: %q", r.Type)

@@ -1,0 +1,11 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_05MNO",
+  "tool_input": {
+    "command": "sleep 100"
+  },
+  "error": "Command interrupted by user",
+  "is_interrupt": true
+}

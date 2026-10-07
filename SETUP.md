@@ -1,125 +1,247 @@
-# Set up the Agent SFX project
+# Agent SFX Setup and Installation Guide
 
-This ZIP contains context files, not a working sound add-on. Keep the files at your new project's root. Gemini CLI uses GEMINI.md as its default context entry point; it imports agent.md, architecture.md and build-plan.md.
+Agent SFX is a local, open-source sound-only accessory for terminal coding agents. It plays short, randomly selected sound effects for seven canonical agent moments without modifying agent prompts, permissions, or outputs.
 
-## 1. Create the project folder
+---
 
-macOS/Linux (adjust the downloaded ZIP path):
+## Prerequisites
+
+- **Go**: Version 1.22 or higher (required for building from source).
+- **Node.js**: Version 18.0.0 or higher (required for npm launchers and Claude Code plugin execution).
+- **Git**: Modern git client.
+- **Operating Systems & Audio Backends**:
+  - **macOS** (`darwin-arm64`, `darwin-x64`): Native playback via `/usr/bin/afplay`.
+  - **Windows** (`win32-x64`): Native playback via PowerShell and `.NET SoundPlayer` with hidden console windows (`CREATE_NO_WINDOW`).
+  - **Linux** (`linux-amd64`): Best-effort playback via `pw-play`, `paplay`, or `aplay`.
+
+---
+
+## 1. Building from Source
+
+### macOS / Linux
 ```bash
-mkdir agent-sfx
-unzip ~/Downloads/agent-sfx-context.zip -d agent-sfx
+# Clone the repository
+git clone https://github.com/your-username/agent-sfx.git
 cd agent-sfx
-git init
-```
 
-Windows PowerShell (adjust the downloaded ZIP path):
-```powershell
-New-Item -ItemType Directory -Path agent-sfx
-Expand-Archive -Path "$HOME\Downloads\agent-sfx-context.zip" -DestinationPath agent-sfx
-Set-Location agent-sfx
-git init
-```
-
-Expected layout:
-```text
-agent-sfx/
-  GEMINI.md
-  agent.md
-  architecture.md
-  build-plan.md
-  progress.md
-  SETUP.md
-  .gitignore
-  docs/research.md
-```
-
-Do not move these files to your global ~/.gemini folder. They belong to this project. Do not download or execute peon-ping's installer; its code was research, not a required dependency.
-
-## 2. Check tools
-```text
-git --version
-go version
-gemini --version
-```
-You already use Gemini CLI. Install a supported stable Go toolchain from https://go.dev/dl/ if missing, then reopen the terminal and check go version. No Docker, Python, jq, Redis or database needed. Node may already be required by Gemini CLI itself; our planned executable does not require it.
-
-If Gemini cannot authenticate or serve requests, resolve your account's supported access before coding. Do not change agent targets or account settings based on assumptions.
-
-## 3. Launch Gemini from this directory
-```bash
-gemini
-```
-Inside Gemini:
-```text
-/memory show
-```
-Confirm the output includes both "Agent implementation instructions" and "Agent SFX architecture", plus the build plan. If not:
-- Confirm current directory and exact case-sensitive filename GEMINI.md.
-- Run /memory reload if supported by your version, then /memory show.
-- If the subcommand is unavailable, check /help or restart Gemini from the project root.
-- If you customized context.fileName, merge GEMINI.md into the existing list instead of overwriting other settings.
-- Review loaded global instructions for conflicting technology/project rules.
-
-Imports are expanded into context; modular files improve organization but do not reduce token usage. The huge peon-ping function audit is intentionally NOT imported. Consult the small docs/research.md only when needed.
-
-After editing context files, reload or restart. Context provides model instructions; it is not a security boundary or a guarantee of perfect compliance.
-
-## 4. First prompt — build only M0
-Paste:
-```text
-Read the loaded project context and progress.md, and inspect this repository.
-Implement only milestone M0 from build-plan.md.
-First check the installed Go version and audio backend. Scaffold a small Go CLI
-with preview and doctor, the seven-event enum, JSON config, validated 16-bit PCM
-WAV playback with volume control, random selection without immediate repeats,
-and fake-player unit tests. Use original software-generated starter sounds with
-recorded provenance. Do not install Gemini hooks, build the IPC worker, enable
-telemetry, implement Claude, or add guessed detection.
-Run formatting, go test ./..., go vet ./..., and a build. Report actual results
-and any audio/platform tests you could not run. Update progress.md and explain
-how I can manually preview a sound. Stop after M0.
-```
-
-## 5. Test the first implementation
-These commands are expected AFTER Gemini implements M0; they do not work with the context pack alone.
-
-macOS/Linux:
-```bash
-go test ./...
-go vet ./...
+# Build the executable into bin/
 go build -o bin/agent-sfx ./cmd/agent-sfx
+
+# Verify binary execution
 ./bin/agent-sfx doctor
-./bin/agent-sfx preview task_finished
 ```
 
-Windows PowerShell:
+### Windows (PowerShell)
 ```powershell
-go test ./...
-go vet ./...
-go build -o bin/agent-sfx.exe ./cmd/agent-sfx
+# Clone the repository
+git clone https://github.com/your-username/agent-sfx.git
+Set-Location agent-sfx
+
+# Build the executable into bin\
+go build -o bin\agent-sfx.exe .\cmd\agent-sfx
+
+# Verify binary execution
 .\bin\agent-sfx.exe doctor
-.\bin\agent-sfx.exe preview task_finished
 ```
 
-No sound? Start with doctor. Missing Linux audio programs/devices, remote shells and containers are legitimate limitations; don't ask Gemini to install audio software or alter system settings without reviewing the change.
+---
 
-## 6. Subsequent prompts
-After M0 actually passes:
+## 2. Pre-Installation Diagnostics and Verification
+
+Before integrating Agent SFX with your agent, verify your local audio capabilities and sound directory:
+
+### Run Diagnostics (`doctor`)
+- macOS / Linux:
+  ```bash
+  ./bin/agent-sfx doctor
+  ```
+- Windows:
+  ```powershell
+  .\bin\agent-sfx.exe doctor
+  ```
+
+Doctor checks:
+- Operating system and architecture.
+- Available audio player backends (`afplay`, `powershell-soundplayer`, or Linux utilities).
+- User configuration file path and active settings.
+- Sound directory resolution and presence of valid WAV files for each canonical event.
+- Running status of the background audio daemon.
+
+### Preview Audio Playback
+Test manual audio playback for each of the seven canonical events:
+```bash
+./bin/agent-sfx preview task_started
+./bin/agent-sfx preview task_finished
+./bin/agent-sfx preview permission_requested
+./bin/agent-sfx preview waiting_for_user
+./bin/agent-sfx preview tests_passed
+./bin/agent-sfx preview usage_exhausted
+./bin/agent-sfx preview error
+```
+*(On Windows, substitute `./bin/agent-sfx` with `.\bin\agent-sfx.exe`)*.
+
+---
+
+## 3. Gemini CLI Integration
+
+Agent SFX integrates natively with Gemini CLI (v0.62.0+) using its hook system.
+
+### Step 1: Inspect Proposed Changes (Dry-Run)
+Inspect what hooks would be added to `.gemini/settings.json` without modifying any files:
+```bash
+./bin/agent-sfx install gemini --dry-run
+```
+Or run the two-way migration and conflict planner:
+```bash
+./bin/agent-sfx setup gemini --dry-run
+```
+
+### Step 2: Install Owned Hooks
+Install the verified hook definitions into your project settings (default) or user settings (`--scope user`):
+```bash
+# Project scope (recommended: writes to .gemini/settings.json with .bak backup)
+./bin/agent-sfx install gemini
+
+# Or user scope (writes to ~/.gemini/settings.json)
+./bin/agent-sfx install gemini --scope user
+```
+
+### Step 3: Verify Hook Receiver
+Test the fail-open hook receiver with a mock prompt turn:
+```bash
+echo '{"hook_event_name": "BeforeAgent", "session_id": "test", "timestamp": "2026-10-04T12:00:00Z"}' | ./bin/agent-sfx hook gemini
+```
+Expected output: exactly `{}` on stdout and exit code `0`.
+
+---
+
+## 4. Claude Code Plugin Integration
+
+Agent SFX provides a self-contained Claude Code plugin inside `npm/claude/` featuring native hook definitions, prebuilt universal binaries, and CC0 starter sounds.
+
+### Step 1: Verify Plugin Diagnostics
+```bash
+node npm/claude/bin/run.js doctor
+node npm/claude/bin/run.js preview task_finished
+```
+
+### Step 2: Register Local Marketplace & Install
+Within your Claude Code terminal interface:
 ```text
-Read progress.md and implement only M1. Keep transport and scheduling testable,
-make the Gemini hook receiver neutral/fail-open, and do not install hooks yet.
-Run tests, update progress.md, and stop at the milestone boundary.
+/plugin marketplace add ./npm/claude
+/plugin install agent-sfx@agent-sfx-local
 ```
-Then:
-```text
-Read progress.md and docs/research.md. Implement only M2 against my installed
-Gemini CLI version. Verify hook schemas, add the four supported mappings and
-installer dry-run/tests. Ask before capturing real payloads or installing any
-hooks. Preserve existing settings. Keep the other events explicitly unsupported.
-```
-Only after reviewing its dry-run should you approve project-scope hook installation. Add tests-pass detection next; investigate authoritative API/quota signals later. No need to complete all seven detections before a useful first release.
 
-## Sources
-- https://geminicli.com/docs/cli/gemini-md
-- https://geminicli.com/docs/hooks/reference/
-- https://go.dev/doc/install
+### Step 3: Testing & In-Turn Clearance
+- Agent SFX uses non-preemptive audio playback with a global cooldown (1,200 ms default).
+- When running live tests in Claude Code, incorporate explicit timing (e.g. `sleep 22` or `Start-Sleep -Seconds 22`) between actions so the turn-start sound clears before completion sounds trigger.
+
+---
+
+## 5. Background Daemon and Runtime Controls
+
+Audio playback runs in an isolated, singleton background worker daemon so hook execution remains non-blocking (<25ms).
+
+### Worker Lifecycle Commands
+```bash
+# Start the background worker daemon manually
+./bin/agent-sfx worker start
+
+# Check worker daemon PID, uptime, and socket path
+./bin/agent-sfx worker status
+
+# Stop the worker daemon gracefully
+./bin/agent-sfx worker stop
+```
+*(Note: With hooks installed, the worker starts automatically on `SessionStart` without delaying the agent).*
+
+### Sound Playback Controls
+Toggle playback at any time without terminating the daemon:
+```bash
+# Mute sound playback (cancels active audio and clears queue)
+./bin/agent-sfx off
+
+# Re-enable sound playback
+./bin/agent-sfx on
+
+# Check persisted config and live worker audio status
+./bin/agent-sfx status
+```
+
+---
+
+## 6. Configuration and Custom Sounds
+
+### Configuration File
+Settings are read from:
+- **macOS**: `~/Library/Application Support/agent-sfx/config.json`
+- **Windows**: `%LOCALAPPDATA%\agent-sfx\config.json`
+- **Linux**: `~/.config/agent-sfx/config.json`
+
+Example `config.json`:
+```json
+{
+  "version": 1,
+  "enabled": true,
+  "volume": 0.6,
+  "cooldown_ms": 1200,
+  "max_clip_ms": 15000,
+  "events": {
+    "permission_requested": true,
+    "task_started": true,
+    "task_finished": true,
+    "waiting_for_user": true,
+    "tests_passed": true,
+    "usage_exhausted": true,
+    "error": true
+  }
+}
+```
+
+### Adding Custom Sounds
+1. Find your active sounds folder (reported by `agent-sfx doctor`).
+2. Add uncompressed 16-bit PCM `.wav` files into the appropriate event subfolder:
+   - `sounds/permission_requested/`
+   - `sounds/task_started/`
+   - `sounds/task_finished/`
+   - `sounds/waiting_for_user/`
+   - `sounds/tests_passed/`
+   - `sounds/usage_exhausted/`
+   - `sounds/error/`
+3. If multiple WAV files exist in a folder, Agent SFX selects one randomly without immediate repeats.
+4. **Limits**: Max duration 15,000 ms (15 seconds); max file size 25 MiB.
+
+---
+
+## 7. Clean Uninstallation and Rollback
+
+### Uninstall Gemini CLI Hooks
+```bash
+# Remove project-scoped hooks
+./bin/agent-sfx uninstall gemini
+
+# Or remove user-scoped hooks
+./bin/agent-sfx uninstall gemini --scope user
+```
+*The uninstaller removes only exact owned hooks whose binary paths match this installation, preserving user hooks and other settings.*
+
+### Uninstall Claude Code Plugin
+Inside Claude Code:
+```text
+/plugin uninstall agent-sfx@agent-sfx-local
+/plugin marketplace remove agent-sfx-local
+```
+
+### Stop Background Daemon & Clean State
+```bash
+# Stop daemon
+./bin/agent-sfx worker stop
+
+# Remove local config and cache (optional)
+# macOS:
+rm -rf ~/Library/Application\ Support/agent-sfx
+rm -rf ~/Library/Caches/agent-sfx
+
+# Windows:
+# Remove-Item -Recurse -Force "$env:LOCALAPPDATA\agent-sfx"
+```

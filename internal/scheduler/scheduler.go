@@ -17,6 +17,11 @@ const (
 	DedupeTTL      = 5 * time.Second
 )
 
+type controlCmd struct {
+	enabled bool
+	resp    chan struct{}
+}
+
 // Scheduler coordinates playback state, deduplication, cooldown, and priority coalescing.
 type Scheduler struct {
 	mu        sync.Mutex
@@ -34,9 +39,10 @@ type Scheduler struct {
 	pendingTimer  <-chan time.Time
 	cancelPlay    context.CancelFunc
 
-	eventCh chan events.Event
-	quit    chan struct{}
-	done    chan struct{}
+	eventCh   chan events.Event
+	controlCh chan controlCmd
+	quit      chan struct{}
+	done      chan struct{}
 }
 
 // New creates a Scheduler ready to run.
@@ -60,6 +66,7 @@ func New(
 		soundsDir:   soundsDir,
 		dedupeCache: make(map[string]time.Time),
 		eventCh:     make(chan events.Event, 32),
+		controlCh:   make(chan controlCmd),
 		quit:        make(chan struct{}),
 		done:        make(chan struct{}),
 	}
@@ -106,6 +113,44 @@ func (s *Scheduler) IsPlaying() bool {
 	return s.playing || now.Before(s.cooldownUntil)
 }
 
+// IsEnabled reports whether the scheduler currently allows sound playback.
+func (s *Scheduler) IsEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cfg.Enabled
+}
+
+// SetEnabled updates the scheduler's enabled state through its owning execution loop.
+// When disabling, any active audio playback is immediately canceled and pending
+// events are cleared. It waits for the loop to apply the changes before returning.
+func (s *Scheduler) SetEnabled(enabled bool) {
+	if !enabled {
+		s.mu.Lock()
+		if s.cancelPlay != nil {
+			s.cancelPlay()
+		}
+		s.mu.Unlock()
+	}
+
+	resp := make(chan struct{})
+	cmd := controlCmd{
+		enabled: enabled,
+		resp:    resp,
+	}
+
+	select {
+	case <-s.done:
+		return
+	case s.controlCh <- cmd:
+	}
+
+	select {
+	case <-s.done:
+		return
+	case <-resp:
+	}
+}
+
 func (s *Scheduler) loop() {
 	defer close(s.done)
 
@@ -114,6 +159,9 @@ func (s *Scheduler) loop() {
 		case <-s.quit:
 			return
 
+		case cmd := <-s.controlCh:
+			s.handleControl(cmd)
+
 		case ev := <-s.eventCh:
 			s.handleArrivedEvent(ev)
 
@@ -121,6 +169,28 @@ func (s *Scheduler) loop() {
 			s.triggerPending()
 		}
 	}
+}
+
+func (s *Scheduler) handleControl(cmd controlCmd) {
+	s.mu.Lock()
+	s.cfg.Enabled = cmd.enabled
+	if !cmd.enabled {
+		s.pendingEvent = nil
+		s.pendingTimer = nil
+		s.cooldownUntil = time.Time{}
+		// Drain any events that arrived in eventCh
+		for {
+			select {
+			case <-s.eventCh:
+			default:
+				goto drained
+			}
+		}
+	drained:
+	}
+	s.mu.Unlock()
+
+	close(cmd.resp)
 }
 
 func (s *Scheduler) handleArrivedEvent(ev events.Event) {
@@ -188,8 +258,12 @@ func (s *Scheduler) triggerPending() {
 
 	s.mu.Lock()
 	s.playing = false
-	cooldownDuration := time.Duration(s.cfg.CooldownMS) * time.Millisecond
-	s.cooldownUntil = s.clock.Now().Add(cooldownDuration)
+	if s.cfg.Enabled {
+		cooldownDuration := time.Duration(s.cfg.CooldownMS) * time.Millisecond
+		s.cooldownUntil = s.clock.Now().Add(cooldownDuration)
+	} else {
+		s.cooldownUntil = time.Time{}
+	}
 	s.mu.Unlock()
 }
 
@@ -221,7 +295,13 @@ func (s *Scheduler) playEvent(ev events.Event) {
 	s.cancelPlay = cancel
 	s.mu.Unlock()
 
-	defer cancel()
+	defer func() {
+		s.mu.Lock()
+		s.cancelPlay = nil
+		s.mu.Unlock()
+		cancel()
+	}()
+
 	_ = s.player.Play(ctx, scaledPath)
 }
 

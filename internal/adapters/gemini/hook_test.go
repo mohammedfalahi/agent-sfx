@@ -144,3 +144,73 @@ func TestHook_SyntheticEventWithActiveWorker(t *testing.T) {
 		t.Errorf("worker did not receive expected event: %+v", receivedReq)
 	}
 }
+
+func TestHook_BeforeToolAskUserDispatchesWaitingForUser(t *testing.T) {
+	shortDir := fmt.Sprintf("/tmp/asfx-test-%d", os.Getuid())
+	_ = os.MkdirAll(shortDir, 0700)
+	defer func() { _ = os.RemoveAll(shortDir) }()
+
+	sockPath := shortDir + "/w.sock"
+
+	var receivedReq *ipc.Request
+	server, err := ipc.NewServer(sockPath, func(req ipc.Request) ipc.Response {
+		receivedReq = &req
+		return ipc.Response{OK: true}
+	})
+	if err != nil {
+		t.Fatalf("NewServer failed: %v", err)
+	}
+	defer server.Close()
+	go func() { _ = server.Serve() }()
+	time.Sleep(20 * time.Millisecond)
+
+	rcv := &gemini.Receiver{
+		SocketPath: sockPath,
+		TestMode:   false, // Real payload normalization
+	}
+
+	payload := `{
+		"session_id": "test-sess",
+		"hook_event_name": "BeforeTool",
+		"timestamp": "2026-10-04T12:00:00Z",
+		"tool_name": "ask_user",
+		"tool_input": {
+			"questions": [
+				{
+					"question": "Choose database?",
+					"header": "Database",
+					"type": "choice",
+					"options": [
+						{"label": "PostgreSQL", "description": "Relational"},
+						{"label": "SQLite", "description": "Embedded"}
+					]
+				}
+			]
+		}
+	}`
+
+	var stdout bytes.Buffer
+	res, err := rcv.ProcessHook(context.Background(), strings.NewReader(payload), &stdout)
+	if err != nil {
+		t.Fatalf("ProcessHook error: %v", err)
+	}
+
+	if stdout.String() != "{}\n" {
+		t.Errorf("expected stdout \"{}\\n\", got %q", stdout.String())
+	}
+
+	if !res.SentEvent {
+		t.Fatalf("expected SentEvent to be true, got drop reason: %s", res.DropReason)
+	}
+
+	if receivedReq == nil || receivedReq.Event == nil {
+		t.Fatalf("worker did not receive event")
+	}
+
+	if receivedReq.Event.Kind != "waiting_for_user" {
+		t.Errorf("expected waiting_for_user kind, got %s", receivedReq.Event.Kind)
+	}
+	if receivedReq.Event.ReasonCode != "ask_user" {
+		t.Errorf("expected reason code 'ask_user', got %s", receivedReq.Event.ReasonCode)
+	}
+}

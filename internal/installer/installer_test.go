@@ -23,8 +23,8 @@ func TestInstaller_PlanAndWrite(t *testing.T) {
 	if !plan.HasChanges {
 		t.Fatalf("expected initial install to have changes")
 	}
-	if len(plan.AddedHooks) != 5 {
-		t.Fatalf("expected 5 added hooks, got %d", len(plan.AddedHooks))
+	if len(plan.AddedHooks) != len(installer.AllOwnedHooks) {
+		t.Fatalf("expected %d added hooks, got %d", len(installer.AllOwnedHooks), len(plan.AddedHooks))
 	}
 
 	// Write proposed changes
@@ -40,8 +40,8 @@ func TestInstaller_PlanAndWrite(t *testing.T) {
 	if plan2.HasChanges {
 		t.Errorf("second install should be idempotent with zero changes")
 	}
-	if len(plan2.UnchangedHooks) != 5 {
-		t.Errorf("expected 5 unchanged hooks, got %d", len(plan2.UnchangedHooks))
+	if len(plan2.UnchangedHooks) != len(installer.AllOwnedHooks) {
+		t.Errorf("expected %d unchanged hooks, got %d", len(installer.AllOwnedHooks), len(plan2.UnchangedHooks))
 	}
 }
 
@@ -101,8 +101,8 @@ func TestInstaller_PreservesUnrelatedSettings(t *testing.T) {
 	if !uPlan.HasChanges {
 		t.Fatalf("expected uninstall to have changes")
 	}
-	if len(uPlan.RemovedHooks) != 5 {
-		t.Errorf("expected 5 removed hooks, got %d", len(uPlan.RemovedHooks))
+	if len(uPlan.RemovedHooks) != len(installer.AllOwnedHooks) {
+		t.Errorf("expected %d removed hooks, got %d", len(installer.AllOwnedHooks), len(uPlan.RemovedHooks))
 	}
 
 	if err := installer.WriteAtomicWithBackup(settingsPath, uRootMap); err != nil {

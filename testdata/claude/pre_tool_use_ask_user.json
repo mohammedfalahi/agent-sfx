@@ -1,0 +1,25 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "AskUserQuestion",
+  "tool_use_id": "toolu_01ABC",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Which database engine should we configure?",
+        "header": "Database",
+        "options": [
+          {
+            "label": "PostgreSQL",
+            "description": "Relational database"
+          },
+          {
+            "label": "SQLite",
+            "description": "Local embedded database"
+          }
+        ],
+        "multiSelect": false
+      }
+    ]
+  }
+}

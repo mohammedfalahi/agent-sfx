@@ -77,6 +77,9 @@ func synthSweep(startFreq, endFreq float64, durationSec float64) []int16 {
 
 func main() {
 	outBase := "sounds"
+	if len(os.Args) > 1 && os.Args[1] != "" {
+		outBase = os.Args[1]
+	}
 
 	// 1. permission_requested: 2-tone melodic chime (A4 440Hz -> C#5 554.37Hz)
 	s1 := append(

@@ -54,18 +54,22 @@ func ResolveSoundsDir(cliDir, cfgDir string) string {
 	if cfgDir != "" {
 		candidates = append(candidates, cfgDir)
 	}
+	if envDir := os.Getenv("AGENT_SFX_BUNDLED_SOUNDS_DIR"); envDir != "" {
+		candidates = append(candidates, envDir)
+	}
 
 	// 1. User config directory
 	if userDir, err := os.UserConfigDir(); err == nil {
 		candidates = append(candidates, filepath.Join(userDir, "agent-sfx", "sounds"))
 	}
 
-	// 2. Executable adjacent sounds directory
+	// 2. Executable adjacent sounds directory (direct or package root)
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		candidates = append(candidates,
 			filepath.Join(exeDir, "sounds"),
 			filepath.Join(exeDir, "..", "sounds"),
+			filepath.Join(exeDir, "..", "..", "sounds"),
 		)
 	}
 

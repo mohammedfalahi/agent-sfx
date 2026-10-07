@@ -5,6 +5,9 @@
 *.test
 coverage.out
 *.prof
+*.tgz
+*.tar.gz
+
 # Local secrets and temporary captures
 .env
 .env.*
@@ -12,8 +15,13 @@ coverage.out
 /local-captures/
 /local-state/
 *.log
-# Personal agent settings: installer merges these locally; do not commit by default
+
+# Personal agent settings and migration snapshots: preserve locally, do not commit
 .gemini/settings.json
+.gemini/*.bak
+.gemini/migration-snapshot-*/
+*.bak
+
 # OS files
 .DS_Store
 Thumbs.db

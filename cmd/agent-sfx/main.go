@@ -2,12 +2,16 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"agent-sfx/internal/adapters/claude"
 	"agent-sfx/internal/adapters/gemini"
 	"agent-sfx/internal/audio"
 	"agent-sfx/internal/config"
@@ -16,6 +20,7 @@ import (
 	"agent-sfx/internal/installer"
 	"agent-sfx/internal/ipc"
 	"agent-sfx/internal/preview"
+	"agent-sfx/internal/setup"
 	"agent-sfx/internal/sounds"
 	"agent-sfx/internal/worker"
 )
@@ -42,7 +47,18 @@ Implemented Commands:
 
   worker status                        Check if the worker daemon is running (M1)
 
+  on                                   Enable Agent SFX sounds (persisted + live worker)
+                                       Flags: --config <path>
+
+  off                                  Disable Agent SFX sounds (persisted + cancel active/clear pending)
+                                       Flags: --config <path>
+
+  status                               Show persisted configuration and live worker status
+                                       Flags: --config <path>, --json
+
   hook gemini                          Neutral stdin/stdout hook receiver for Gemini CLI (M1/M2)
+
+  hook claude                          Neutral stdin/stdout hook receiver for Claude Code (M5)
 
   install gemini                       Install hooks into .gemini/settings.json (M2)
                                        Flags:
@@ -53,6 +69,9 @@ Implemented Commands:
                                        Flags:
                                          --scope <project|user>  Scope (default: project)
                                          --dry-run               Show exact proposed changes without writing
+
+  setup gemini|claude --dry-run        Inspect integrations, detect conflicts, and show proposed migration
+                                       Flags: --dry-run (required), --package-dir <path>, --project-dir <path>, --user-dir <path>
 
 Planned Commands (Future Milestones):
   Claude Code Adapter                  Dedicated adapter for Claude Code hooks (planned for M5)
@@ -74,12 +93,20 @@ func main() {
 		runDoctor(os.Args[2:])
 	case "worker":
 		runWorker(os.Args[2:])
+	case "on":
+		runOn(os.Args[2:])
+	case "off":
+		runOff(os.Args[2:])
+	case "status":
+		runStatus(os.Args[2:])
 	case "hook":
 		runHook(os.Args[2:])
 	case "install":
 		runInstall(os.Args[2:])
 	case "uninstall":
 		runUninstall(os.Args[2:])
+	case "setup":
+		runSetup(os.Args[2:])
 	case "help", "-h", "--help":
 		printUsage()
 		os.Exit(0)
@@ -289,25 +316,35 @@ func runHook(args []string) {
 	}
 
 	adapter := args[0]
-	if adapter != "gemini" {
-		fmt.Println("{}")
-		os.Exit(0)
-	}
-
 	socketPath, _ := ipc.ResolveSocketPath()
 	exePath, _ := os.Executable()
 	resolvedSounds := preview.ResolveSoundsDir("", "")
 
-	receiver := &gemini.Receiver{
-		SocketPath: socketPath,
-		BinaryPath: exePath,
-		SoundsDir:  resolvedSounds,
-		TestMode:   false, // Production hook mode
-	}
+	switch adapter {
+	case "gemini":
+		receiver := &gemini.Receiver{
+			SocketPath: socketPath,
+			BinaryPath: exePath,
+			SoundsDir:  resolvedSounds,
+			TestMode:   false,
+		}
+		_, _ = receiver.ProcessHook(context.Background(), os.Stdin, os.Stdout)
+		os.Exit(0)
 
-	// ProcessHook always prints "{}\n" to stdout
-	_, _ = receiver.ProcessHook(context.Background(), os.Stdin, os.Stdout)
-	os.Exit(0)
+	case "claude":
+		receiver := &claude.Receiver{
+			SocketPath: socketPath,
+			BinaryPath: exePath,
+			SoundsDir:  resolvedSounds,
+			TestMode:   false,
+		}
+		_, _ = receiver.ProcessHook(context.Background(), os.Stdin, os.Stdout)
+		os.Exit(0)
+
+	default:
+		fmt.Println("{}")
+		os.Exit(0)
+	}
 }
 
 func runInstall(args []string) {
@@ -448,4 +485,245 @@ func runUninstall(args []string) {
 
 	fmt.Printf("[OK] Successfully uninstalled Agent SFX hooks from %s (backup preserved at %s.bak)\n",
 		settingsPath, settingsPath)
+}
+
+func runOn(args []string) {
+	fs := flag.NewFlagSet("on", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to custom configuration JSON file")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	targetPath, err := config.SetEnabled(*configPath, true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Persisted config : enabled (in %s)\n", targetPath)
+
+	sockPath, err := ipc.ResolveSocketPath()
+	if err != nil {
+		fmt.Printf("Worker daemon    : unsupported on this platform\n")
+		return
+	}
+
+	resp, err := worker.SetWorkerEnabled(sockPath, true)
+	if err != nil {
+		if errors.Is(err, worker.ErrWorkerNotRunning) {
+			fmt.Printf("Worker daemon    : not running (setting will take effect on next worker start)\n")
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Worker communication error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if resp.OK {
+		fmt.Printf("Worker daemon    : acknowledged [PID: %d, live audio enabled]\n", resp.PID)
+	} else {
+		fmt.Fprintf(os.Stderr, "Worker error: %s\n", resp.Error)
+		os.Exit(1)
+	}
+}
+
+func runOff(args []string) {
+	fs := flag.NewFlagSet("off", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to custom configuration JSON file")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	targetPath, err := config.SetEnabled(*configPath, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error updating configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("Persisted config : disabled (in %s)\n", targetPath)
+
+	sockPath, err := ipc.ResolveSocketPath()
+	if err != nil {
+		fmt.Printf("Worker daemon    : unsupported on this platform\n")
+		return
+	}
+
+	resp, err := worker.SetWorkerEnabled(sockPath, false)
+	if err != nil {
+		if errors.Is(err, worker.ErrWorkerNotRunning) {
+			fmt.Printf("Worker daemon    : not running (setting will take effect on next worker start)\n")
+			return
+		}
+		fmt.Fprintf(os.Stderr, "Worker communication error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if resp.OK {
+		fmt.Printf("Worker daemon    : acknowledged [PID: %d, playback canceled, live audio muted]\n", resp.PID)
+	} else {
+		fmt.Fprintf(os.Stderr, "Worker error: %s\n", resp.Error)
+		os.Exit(1)
+	}
+}
+
+type statusReport struct {
+	Persisted struct {
+		ConfigPath string `json:"config_path"`
+		Enabled    bool   `json:"enabled"`
+		Valid      bool   `json:"valid"`
+		Error      string `json:"error,omitempty"`
+	} `json:"persisted"`
+	Worker struct {
+		Supported bool   `json:"supported"`
+		Running   bool   `json:"running"`
+		PID       int    `json:"pid,omitempty"`
+		UptimeSec int64  `json:"uptime_sec,omitempty"`
+		Enabled   bool   `json:"enabled"`
+		Playing   bool   `json:"playing"`
+		Socket    string `json:"socket,omitempty"`
+	} `json:"worker"`
+}
+
+func runStatus(args []string) {
+	fs := flag.NewFlagSet("status", flag.ExitOnError)
+	configPath := fs.String("config", "", "Path to custom configuration JSON file")
+	jsonOut := fs.Bool("json", false, "Output in JSON format")
+	if err := fs.Parse(args); err != nil {
+		os.Exit(1)
+	}
+
+	var report statusReport
+
+	cfg, targetPath, err := config.Load(*configPath)
+	report.Persisted.ConfigPath = targetPath
+	if err != nil {
+		report.Persisted.Valid = false
+		report.Persisted.Error = err.Error()
+	} else {
+		report.Persisted.Valid = true
+		report.Persisted.Enabled = cfg.Enabled
+	}
+
+	sockPath, err := ipc.ResolveSocketPath()
+	if err != nil {
+		report.Worker.Supported = false
+	} else {
+		report.Worker.Supported = true
+		report.Worker.Socket = sockPath
+		resp, err := worker.StatusDaemon(sockPath)
+		if err == nil && resp.OK {
+			report.Worker.Running = true
+			report.Worker.PID = resp.PID
+			report.Worker.UptimeSec = resp.Uptime
+			report.Worker.Enabled = resp.Enabled
+			report.Worker.Playing = resp.Playing
+		}
+	}
+
+	if *jsonOut {
+		data, err := json.MarshalIndent(report, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "JSON formatting error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println(string(data))
+		return
+	}
+
+	fmt.Printf("Agent SFX Status\n")
+	fmt.Printf("----------------\n")
+	if !report.Persisted.Valid {
+		fmt.Printf("Persisted Config : INVALID (%s) [path: %s]\n", report.Persisted.Error, report.Persisted.ConfigPath)
+	} else if report.Persisted.Enabled {
+		fmt.Printf("Persisted Config : enabled (in %s)\n", report.Persisted.ConfigPath)
+	} else {
+		fmt.Printf("Persisted Config : disabled (in %s)\n", report.Persisted.ConfigPath)
+	}
+
+	if !report.Worker.Supported {
+		fmt.Printf("Worker Daemon    : unsupported on this platform\n")
+	} else if report.Worker.Running {
+		audioState := "enabled"
+		if !report.Worker.Enabled {
+			audioState = "muted"
+		}
+		playingStr := "idle"
+		if report.Worker.Playing {
+			playingStr = "playing"
+		}
+		fmt.Printf("Worker Daemon    : running [PID: %d, uptime: %ds, socket: %s]\n",
+			report.Worker.PID, report.Worker.UptimeSec, report.Worker.Socket)
+		fmt.Printf("Worker State     : live audio %s (%s)\n", audioState, playingStr)
+	} else {
+		fmt.Printf("Worker Daemon    : not running (socket: %s)\n", report.Worker.Socket)
+	}
+}
+
+func runSetup(args []string) {
+	if len(args) < 1 {
+		fmt.Fprintf(os.Stderr, "Usage: agent-sfx setup gemini|claude --dry-run\n")
+		os.Exit(1)
+	}
+
+	targetAgent := args[0]
+	if targetAgent != "gemini" && targetAgent != "claude" {
+		fmt.Fprintf(os.Stderr, "Unsupported agent %q for setup. Supported: gemini, claude\n", targetAgent)
+		os.Exit(1)
+	}
+
+	fs := flag.NewFlagSet("setup "+targetAgent, flag.ExitOnError)
+	dryRun := fs.Bool("dry-run", false, "Show proposed integration plan without modifying settings (required)")
+	packageDir := fs.String("package-dir", "", "Path to agent-sfx package directory (optional override)")
+	projectDir := fs.String("project-dir", "", "Path to project workspace directory (optional override)")
+	userDir := fs.String("user-dir", "", "Path to user home directory (optional override)")
+	_ = fs.Parse(args[1:])
+
+	if !*dryRun {
+		fmt.Fprintf(os.Stderr, "Error: --dry-run is currently required. Live integration modification is pending review.\n")
+		fmt.Fprintf(os.Stderr, "Run: agent-sfx setup %s --dry-run\n", targetAgent)
+		os.Exit(1)
+	}
+
+	workspace := *projectDir
+	if workspace == "" {
+		if wd, err := os.Getwd(); err == nil {
+			workspace = wd
+		}
+	}
+
+	home := *userDir
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil {
+			home = h
+		}
+	}
+
+	cliRunner := func(name string, cArgs ...string) ([]byte, error) {
+		cmd := exec.Command(name, cArgs...)
+		return cmd.Output()
+	}
+
+	if targetAgent == "claude" {
+		plan, err := setup.PlanClaudeSetup(workspace, home, *packageDir, cliRunner)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Claude setup planning failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		fmt.Print(plan.FormatDryRun())
+		if plan.MigrationAbort {
+			os.Exit(1)
+		}
+		return
+	}
+
+	plan, err := setup.PlanSetup(workspace, home, *packageDir, cliRunner)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Setup planning failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Print(plan.FormatDryRun())
+	if plan.MigrationAbort {
+		os.Exit(1)
+	}
 }

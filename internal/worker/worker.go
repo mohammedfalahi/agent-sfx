@@ -146,6 +146,23 @@ func (d *Daemon) handleIPC(req ipc.Request) ipc.Response {
 			PID:     os.Getpid(),
 			Uptime:  uptime,
 			Playing: d.sched.IsPlaying(),
+			Enabled: d.sched.IsEnabled(),
+		}
+
+	case ipc.TypeEnable:
+		d.sched.SetEnabled(true)
+		return ipc.Response{
+			OK:      true,
+			PID:     os.Getpid(),
+			Enabled: true,
+		}
+
+	case ipc.TypeDisable:
+		d.sched.SetEnabled(false)
+		return ipc.Response{
+			OK:      true,
+			PID:     os.Getpid(),
+			Enabled: false,
 		}
 
 	case ipc.TypeStop:

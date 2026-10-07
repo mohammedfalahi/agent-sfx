@@ -9,6 +9,28 @@ import (
 	"sync"
 )
 
+const (
+	WindowsPlayPathEnv = "AGENT_SFX_PLAY_PATH"
+	WindowsPlayScript  = `$p = $env:AGENT_SFX_PLAY_PATH; if (-not $p -or -not (Test-Path -LiteralPath $p)) { exit 1 }; (New-Object Media.SoundPlayer $p).PlaySync()`
+)
+
+// WindowsPowerShellArgs returns the argument list for invoking PowerShell audio playback.
+// The script is constant and does not interpolate user-controlled paths into script source.
+func WindowsPowerShellArgs() []string {
+	return []string{
+		"-NoProfile",
+		"-NonInteractive",
+		"-WindowStyle", "Hidden",
+		"-Command",
+		WindowsPlayScript,
+	}
+}
+
+// BuildWindowsPlayerEnv constructs the child-process environment block containing the audio path.
+func BuildWindowsPlayerEnv(baseEnv []string, wavPath string) []string {
+	return append(baseEnv, WindowsPlayPathEnv+"="+wavPath)
+}
+
 // Player provides an abstraction for playing uncompressed WAV audio files on the local OS.
 type Player interface {
 	Play(ctx context.Context, wavPath string) error
@@ -21,6 +43,7 @@ type OSPlayer struct {
 	backendName string
 	binPath     string
 	argsBuilder func(wavPath string) []string
+	cmdPreparer func(cmd *exec.Cmd, wavPath string)
 }
 
 // DetectPlayer inspects the current OS and available utilities to return the best player backend.
@@ -64,15 +87,9 @@ func DetectPlayer() (Player, error) {
 			backendName: "powershell-soundplayer",
 			binPath:     path,
 			argsBuilder: func(wavPath string) []string {
-				return []string{
-					"-NoProfile",
-					"-NonInteractive",
-					"-WindowStyle", "Hidden",
-					"-Command",
-					"param($p) (New-Object Media.SoundPlayer $p).PlaySync()",
-					wavPath,
-				}
+				return WindowsPowerShellArgs()
 			},
+			cmdPreparer: prepareWindowsPlayerCmd,
 		}, nil
 
 	default:
@@ -103,6 +120,10 @@ func (p *OSPlayer) Play(ctx context.Context, wavPath string) error {
 	cmd.Stdin = nil
 	cmd.Stdout = nil
 	cmd.Stderr = nil
+
+	if p.cmdPreparer != nil {
+		p.cmdPreparer(cmd, wavPath)
+	}
 
 	if err := cmd.Run(); err != nil {
 		if errors.Is(ctx.Err(), context.Canceled) || errors.Is(ctx.Err(), context.DeadlineExceeded) {

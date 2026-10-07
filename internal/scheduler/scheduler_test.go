@@ -235,3 +235,128 @@ func TestScheduler_PlayerTimeout(t *testing.T) {
 		t.Errorf("expected player context to receive cancellation")
 	}
 }
+
+func TestScheduler_SetEnabledLiveCancelAndDrain(t *testing.T) {
+	sched, clock, player, _ := setupSchedulerTest(t)
+
+	startedPlay := make(chan struct{})
+	var playCanceled bool
+
+	player.PlayFunc = func(ctx context.Context, wavPath string) error {
+		close(startedPlay)
+		<-ctx.Done()
+		playCanceled = true
+		return ctx.Err()
+	}
+
+	sched.Start()
+	defer sched.Stop()
+
+	if !sched.IsEnabled() {
+		t.Errorf("expected scheduler to be enabled initially")
+	}
+
+	// 1. Enqueue event and wait for playback to start
+	sched.Enqueue(events.Event{
+		Kind:       events.EventTaskStarted,
+		Agent:      "gemini",
+		SessionID:  "sess-cancel",
+		ObservedAt: clock.Now(),
+	})
+	clock.WaitForTimers(1)
+	clock.Advance(150 * time.Millisecond)
+
+	select {
+	case <-startedPlay:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatalf("playback did not start in time")
+	}
+
+	if !sched.IsPlaying() {
+		t.Errorf("expected IsPlaying to be true while sound is playing")
+	}
+
+	// Enqueue a pending event while playback is active
+	sched.Enqueue(events.Event{
+		Kind:       events.EventTaskFinished,
+		Agent:      "gemini",
+		SessionID:  "sess-cancel",
+		ObservedAt: clock.Now(),
+	})
+
+	// 2. Disable scheduler while audio is playing
+	sched.SetEnabled(false)
+
+	// Verify play context was canceled immediately
+	if !playCanceled {
+		t.Errorf("expected active playback to be canceled by SetEnabled(false)")
+	}
+	if sched.IsEnabled() {
+		t.Errorf("expected IsEnabled() to be false after SetEnabled(false)")
+	}
+	if sched.IsPlaying() {
+		t.Errorf("expected IsPlaying() to be false immediately after SetEnabled(false)")
+	}
+
+	// 3. Enqueue another event while disabled
+	sched.Enqueue(events.Event{
+		Kind:       events.EventError,
+		Agent:      "gemini",
+		SessionID:  "sess-cancel",
+		ObservedAt: clock.Now(),
+	})
+	clock.Advance(200 * time.Millisecond)
+	time.Sleep(30 * time.Millisecond)
+
+	// Calls should only contain the single canceled call
+	if len(player.Calls()) != 1 {
+		t.Errorf("expected exactly 1 player call (the canceled one), got %d", len(player.Calls()))
+	}
+
+	// 4. Re-enable scheduler
+	player.PlayFunc = nil // allow normal non-blocking play
+	sched.SetEnabled(true)
+	if !sched.IsEnabled() {
+		t.Errorf("expected IsEnabled() to be true after SetEnabled(true)")
+	}
+
+	// Enqueue event after re-enabling
+	sched.Enqueue(events.Event{
+		Kind:       events.EventTestsPassed,
+		Agent:      "gemini",
+		SessionID:  "sess-after-enable",
+		ObservedAt: clock.Now(),
+	})
+	clock.WaitForTimers(1)
+	clock.Advance(150 * time.Millisecond)
+	time.Sleep(50 * time.Millisecond)
+
+	if len(player.Calls()) != 2 {
+		t.Errorf("expected 2 player calls after re-enable, got %d", len(player.Calls()))
+	}
+}
+
+func TestScheduler_RepeatedControls(t *testing.T) {
+	sched, _, _, _ := setupSchedulerTest(t)
+	sched.Start()
+	defer sched.Stop()
+
+	// Repeated false calls are idempotent
+	sched.SetEnabled(false)
+	sched.SetEnabled(false)
+	if sched.IsEnabled() {
+		t.Errorf("expected IsEnabled to be false")
+	}
+
+	// Repeated true calls are idempotent
+	sched.SetEnabled(true)
+	sched.SetEnabled(true)
+	if !sched.IsEnabled() {
+		t.Errorf("expected IsEnabled to be true")
+	}
+
+	// Rapid toggles
+	for i := 0; i < 10; i++ {
+		sched.SetEnabled(i%2 == 0)
+	}
+}

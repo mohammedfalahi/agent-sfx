@@ -1,0 +1,5 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "run tests on the project"
+}

@@ -1,0 +1,76 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-session-start",
+            "type": "command",
+            "command": "\"${extensionPath}/bin/run.js\" worker start"
+          }
+        ]
+      }
+    ],
+    "BeforeAgent": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-before-agent",
+            "type": "command",
+            "command": "\"${extensionPath}/bin/run.js\" hook gemini"
+          }
+        ]
+      }
+    ],
+    "AfterAgent": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-after-agent",
+            "type": "command",
+            "command": "\"${extensionPath}/bin/run.js\" hook gemini"
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-notification",
+            "type": "command",
+            "command": "\"${extensionPath}/bin/run.js\" hook gemini"
+          }
+        ]
+      }
+    ],
+    "BeforeTool": [
+      {
+        "matcher": "^ask_user$",
+        "hooks": [
+          {
+            "name": "agent-sfx-before-tool-ask-user",
+            "type": "command",
+            "command": "\"${extensionPath}/bin/run.js\" hook gemini"
+          }
+        ]
+      }
+    ],
+    "AfterTool": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-after-tool",
+            "type": "command",
+            "command": "\"${extensionPath}/bin/run.js\" hook gemini"
+          }
+        ]
+      }
+    ]
+  }
+}

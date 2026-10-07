@@ -355,3 +355,395 @@ func TestNormalize_MalformedJSON(t *testing.T) {
 		t.Fatalf("expected nil event on malformed json")
 	}
 }
+
+func TestNormalize_BeforeToolAskUser_SingleQuestion(t *testing.T) {
+	data := loadFixture(t, "before_tool_ask_user.json")
+	ev, err := gemini.Normalize(data)
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if ev == nil {
+		t.Fatalf("expected waiting_for_user event, got nil")
+	}
+	if ev.Kind != events.EventWaitingForUser {
+		t.Errorf("expected EventWaitingForUser, got %s", ev.Kind)
+	}
+	if ev.ReasonCode != "ask_user" {
+		t.Errorf("expected reason 'ask_user', got %s", ev.ReasonCode)
+	}
+	if ev.Agent != "gemini" {
+		t.Errorf("expected agent 'gemini', got %s", ev.Agent)
+	}
+	if ev.DedupeKey != "waiting_for_user:2026-10-04T12:00:00Z" {
+		t.Errorf("unexpected DedupeKey: %s", ev.DedupeKey)
+	}
+}
+
+func TestNormalize_BeforeToolAskUser_MultiQuestions(t *testing.T) {
+	data := loadFixture(t, "before_tool_ask_user_multi.json")
+	ev, err := gemini.Normalize(data)
+	if err != nil {
+		t.Fatalf("Normalize error: %v", err)
+	}
+	if ev == nil {
+		t.Fatalf("expected waiting_for_user event for multi-question request, got nil")
+	}
+	// Exactly one event is emitted for the entire invocation
+	if ev.Kind != events.EventWaitingForUser {
+		t.Errorf("expected EventWaitingForUser, got %s", ev.Kind)
+	}
+	if ev.ReasonCode != "ask_user" {
+		t.Errorf("expected reason 'ask_user', got %s", ev.ReasonCode)
+	}
+}
+
+func TestNormalize_BeforeToolOtherToolIgnored(t *testing.T) {
+	data := loadFixture(t, "before_tool_other.json")
+	ev, err := gemini.Normalize(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev != nil {
+		t.Fatalf("expected other tool in BeforeTool to produce nil event, got %+v", ev)
+	}
+}
+
+func TestNormalize_BeforeToolAskUser_ValidationEdgeCases(t *testing.T) {
+	cases := []struct {
+		name       string
+		toolInput  string
+		shouldPass bool
+	}{
+		{
+			name:       "empty object",
+			toolInput:  `{}`,
+			shouldPass: false,
+		},
+		{
+			name:       "empty questions array",
+			toolInput:  `{"questions": []}`,
+			shouldPass: false,
+		},
+		{
+			name: "more than 4 questions",
+			toolInput: `{
+				"questions": [
+					{"question": "Q1?", "header": "H1", "type": "text"},
+					{"question": "Q2?", "header": "H2", "type": "text"},
+					{"question": "Q3?", "header": "H3", "type": "text"},
+					{"question": "Q4?", "header": "H4", "type": "text"},
+					{"question": "Q5?", "header": "H5", "type": "text"}
+				]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name:       "missing question string",
+			toolInput:  `{"questions": [{"header": "H1", "type": "text"}]}`,
+			shouldPass: false,
+		},
+		{
+			name:       "empty question string",
+			toolInput:  `{"questions": [{"question": "  ", "header": "H1", "type": "text"}]}`,
+			shouldPass: false,
+		},
+		{
+			name:       "missing header string",
+			toolInput:  `{"questions": [{"question": "What?", "type": "text"}]}`,
+			shouldPass: false,
+		},
+		{
+			name:       "empty header string",
+			toolInput:  `{"questions": [{"question": "What?", "header": "   ", "type": "text"}]}`,
+			shouldPass: false,
+		},
+		{
+			name: "unsupported question type",
+			toolInput: `{
+				"questions": [{"question": "What?", "header": "H1", "type": "rating"}]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name: "choice type with missing options",
+			toolInput: `{
+				"questions": [{"question": "Pick?", "header": "H1", "type": "choice"}]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name: "choice type with only 1 option (minimum is 2)",
+			toolInput: `{
+				"questions": [{
+					"question": "Pick?", "header": "H1", "type": "choice",
+					"options": [{"label": "A", "description": "Desc A"}]
+				}]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name: "choice type with 5 options (maximum is 4)",
+			toolInput: `{
+				"questions": [{
+					"question": "Pick?", "header": "H1", "type": "choice",
+					"options": [
+						{"label": "1", "description": "D1"},
+						{"label": "2", "description": "D2"},
+						{"label": "3", "description": "D3"},
+						{"label": "4", "description": "D4"},
+						{"label": "5", "description": "D5"}
+					]
+				}]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name: "choice option missing label",
+			toolInput: `{
+				"questions": [{
+					"question": "Pick?", "header": "H1", "type": "choice",
+					"options": [
+						{"label": "", "description": "D1"},
+						{"label": "2", "description": "D2"}
+					]
+				}]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name: "choice option missing description",
+			toolInput: `{
+				"questions": [{
+					"question": "Pick?", "header": "H1", "type": "choice",
+					"options": [
+						{"label": "1"},
+						{"label": "2", "description": "D2"}
+					]
+				}]
+			}`,
+			shouldPass: false,
+		},
+		{
+			name: "choice default type when type omitted (valid 2 options)",
+			toolInput: `{
+				"questions": [{
+					"question": "Pick?", "header": "H1",
+					"options": [
+						{"label": "1", "description": "D1"},
+						{"label": "2", "description": "D2"}
+					]
+				}]
+			}`,
+			shouldPass: true,
+		},
+		{
+			name: "yesno question valid without options",
+			toolInput: `{
+				"questions": [{"question": "Proceed?", "header": "Deploy", "type": "yesno"}]
+			}`,
+			shouldPass: true,
+		},
+		{
+			name: "text question with placeholder valid",
+			toolInput: `{
+				"questions": [{"question": "Name?", "header": "App", "type": "text", "placeholder": "my-app"}]
+			}`,
+			shouldPass: true,
+		},
+		{
+			name: "yesno question with invalid option label",
+			toolInput: `{
+				"questions": [{
+					"question": "Proceed?", "header": "Deploy", "type": "yesno",
+					"options": [{"label": "", "description": "desc"}]
+				}]
+			}`,
+			shouldPass: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := `{
+				"session_id": "test-sess",
+				"hook_event_name": "BeforeTool",
+				"timestamp": "2026-10-04T12:00:00Z",
+				"tool_name": "ask_user",
+				"tool_input": ` + tc.toolInput + `
+			}`
+			ev, err := gemini.Normalize([]byte(payload))
+			if err != nil {
+				t.Fatalf("Normalize error: %v", err)
+			}
+			if tc.shouldPass && ev == nil {
+				t.Errorf("expected valid event for %s, got nil", tc.name)
+			}
+			if !tc.shouldPass && ev != nil {
+				t.Errorf("expected nil event for invalid input %s, got %+v", tc.name, ev)
+			}
+		})
+	}
+}
+
+func TestNormalize_NotificationAskUserSuppression(t *testing.T) {
+	// 1. Notification with details.type == "ask_user" is suppressed
+	data := loadFixture(t, "notification_ask_user.json")
+	ev, err := gemini.Normalize(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ev != nil {
+		t.Fatalf("expected ask_user notification to be suppressed, got %+v", ev)
+	}
+
+	// 2. Notification with other details preserved (e.g. exec permission)
+	execNotif := `{
+		"session_id": "test-sess",
+		"hook_event_name": "Notification",
+		"timestamp": "2026-10-04T12:00:00Z",
+		"notification_type": "ToolPermission",
+		"details": {"type": "exec", "command": "rm -rf /tmp/foo"}
+	}`
+	evExec, err := gemini.Normalize([]byte(execNotif))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evExec == nil || evExec.Kind != events.EventPermissionRequested {
+		t.Fatalf("expected permission_requested for exec details, got %+v", evExec)
+	}
+
+	// 3. Notification with malformed details JSON preserved
+	malformedNotif := `{
+		"session_id": "test-sess",
+		"hook_event_name": "Notification",
+		"timestamp": "2026-10-04T12:00:00Z",
+		"notification_type": "ToolPermission",
+		"details": "invalid-json-structure"
+	}`
+	evMalformed, err := gemini.Normalize([]byte(malformedNotif))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evMalformed == nil || evMalformed.Kind != events.EventPermissionRequested {
+		t.Fatalf("expected permission_requested on malformed details, got %+v", evMalformed)
+	}
+
+	// 4. Notification with empty details preserved
+	emptyNotif := `{
+		"session_id": "test-sess",
+		"hook_event_name": "Notification",
+		"timestamp": "2026-10-04T12:00:00Z",
+		"notification_type": "ToolPermission"
+	}`
+	evEmpty, err := gemini.Normalize([]byte(emptyNotif))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evEmpty == nil || evEmpty.Kind != events.EventPermissionRequested {
+		t.Fatalf("expected permission_requested on empty details, got %+v", evEmpty)
+	}
+}
+
+func TestNormalize_AfterToolAskUser_NoSecondSound(t *testing.T) {
+	// User answered successfully
+	answeredPayload := `{
+		"session_id": "sess-test",
+		"hook_event_name": "AfterTool",
+		"timestamp": "2026-10-04T12:00:05Z",
+		"tool_name": "ask_user",
+		"tool_response": {
+			"llmContent": "{\"answers\":{\"0\":\"PostgreSQL\"}}",
+			"returnDisplay": "User answered: Database: PostgreSQL"
+		}
+	}`
+	evAnswered, err := gemini.Normalize([]byte(answeredPayload))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evAnswered != nil {
+		t.Fatalf("AfterTool successful answer must produce nil event, got %+v", evAnswered)
+	}
+
+	// User dismissed dialog
+	dismissedPayload := `{
+		"session_id": "sess-test",
+		"hook_event_name": "AfterTool",
+		"timestamp": "2026-10-04T12:00:05Z",
+		"tool_name": "ask_user",
+		"tool_response": {
+			"llmContent": "User dismissed ask_user dialog without answering.",
+			"returnDisplay": "User dismissed dialog"
+		}
+	}`
+	evDismissed, err := gemini.Normalize([]byte(dismissedPayload))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evDismissed != nil {
+		t.Fatalf("AfterTool dialog dismissal must produce nil event, got %+v", evDismissed)
+	}
+
+	// Genuine structured tool error on ask_user produces EventError
+	errorPayload := `{
+		"session_id": "sess-test",
+		"hook_event_name": "AfterTool",
+		"timestamp": "2026-10-04T12:00:05Z",
+		"tool_name": "ask_user",
+		"tool_response": {
+			"llmContent": "Dialog crashed",
+			"error": {
+				"message": "Dialog failed to render in non-interactive environment",
+				"type": "terminal_error"
+			}
+		}
+	}`
+	evError, err := gemini.Normalize([]byte(errorPayload))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if evError == nil || evError.Kind != events.EventError {
+		t.Fatalf("expected EventError for genuine error on ask_user, got %+v", evError)
+	}
+}
+
+func TestNormalize_DedupeKeyReplayBehavior(t *testing.T) {
+	// Verify that identical payload replays produce identical dedupe key
+	payload1 := `{
+		"session_id": "sess-1",
+		"hook_event_name": "BeforeTool",
+		"timestamp": "2026-10-04T12:00:00Z",
+		"tool_name": "ask_user",
+		"tool_input": {"questions": [{"question": "Q1?", "header": "H1", "type": "text"}]}
+	}`
+	// Same payload with same timestamp (replay)
+	payload1Replay := `{
+		"session_id": "sess-1",
+		"hook_event_name": "BeforeTool",
+		"timestamp": "2026-10-04T12:00:00Z",
+		"tool_name": "ask_user",
+		"tool_input": {"questions": [{"question": "Q1?", "header": "H1", "type": "text"}]}
+	}`
+	// Different timestamp
+	payload2 := `{
+		"session_id": "sess-1",
+		"hook_event_name": "BeforeTool",
+		"timestamp": "2026-10-04T12:00:01Z",
+		"tool_name": "ask_user",
+		"tool_input": {"questions": [{"question": "Q1?", "header": "H1", "type": "text"}]}
+	}`
+
+	ev1, _ := gemini.Normalize([]byte(payload1))
+	evReplay, _ := gemini.Normalize([]byte(payload1Replay))
+	ev2, _ := gemini.Normalize([]byte(payload2))
+
+	if ev1.DedupeKey != evReplay.DedupeKey {
+		t.Errorf("expected identical dedupe keys on replay: %s vs %s", ev1.DedupeKey, evReplay.DedupeKey)
+	}
+	if ev1.DedupeKey == ev2.DedupeKey {
+		t.Errorf("expected different dedupe keys for different timestamps: %s vs %s", ev1.DedupeKey, ev2.DedupeKey)
+	}
+	// Verify dedupe key does not contain question content
+	if ev1.DedupeKey != "waiting_for_user:2026-10-04T12:00:00Z" {
+		t.Errorf("dedupe key should only contain event kind and timestamp, got %s", ev1.DedupeKey)
+	}
+}

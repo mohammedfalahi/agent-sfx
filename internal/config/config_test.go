@@ -212,3 +212,192 @@ func TestLoadMissingExplicitPath(t *testing.T) {
 		t.Fatalf("expected error for nonexistent custom path, got nil")
 	}
 }
+
+func TestSetEnabled_PreservesUnknownFieldsAndPrecision(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "config.json")
+
+	// JSON with custom fields and large integer that would lose precision with float64
+	initialJSON := `{
+  "version": 1,
+  "enabled": true,
+  "volume": 0.8,
+  "cooldown_ms": 1500,
+  "max_clip_ms": 15000,
+  "sounds_dir": "/custom/sounds",
+  "custom_feature_flag": "active",
+  "large_id": 9007199254740993,
+  "nested_metadata": {
+    "author": "developer",
+    "tags": ["audio", "sfx"]
+  },
+  "events": {
+    "task_finished": true,
+    "error": false
+  }
+}`
+	if err := os.WriteFile(cfgPath, []byte(initialJSON), 0644); err != nil {
+		t.Fatalf("failed to write initial config: %v", err)
+	}
+
+	// Toggle to false
+	p, err := config.SetEnabled(cfgPath, false)
+	if err != nil {
+		t.Fatalf("SetEnabled(false) failed: %v", err)
+	}
+	if p != cfgPath {
+		t.Errorf("expected path %s, got %s", cfgPath, p)
+	}
+
+	// Verify loaded typed config reflects enabled: false
+	loaded, _, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() failed after SetEnabled: %v", err)
+	}
+	if loaded.Enabled {
+		t.Errorf("expected loaded config.Enabled to be false")
+	}
+	if loaded.Volume != 0.8 {
+		t.Errorf("expected volume 0.8, got %v", loaded.Volume)
+	}
+	if loaded.SoundsDir != "/custom/sounds" {
+		t.Errorf("expected sounds_dir to be preserved, got %q", loaded.SoundsDir)
+	}
+
+	// Verify raw content preserves custom keys and exact large number digits
+	content, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("failed to read updated config file: %v", err)
+	}
+	rawStr := string(content)
+
+	if !containsString(rawStr, `"custom_feature_flag": "active"`) {
+		t.Errorf("custom_feature_flag was not preserved in raw JSON:\n%s", rawStr)
+	}
+	if !containsString(rawStr, `"large_id": 9007199254740993`) {
+		t.Errorf("large_id was modified or lost precision in raw JSON:\n%s", rawStr)
+	}
+	if !containsString(rawStr, `"author": "developer"`) {
+		t.Errorf("nested_metadata was not preserved in raw JSON:\n%s", rawStr)
+	}
+	if !containsString(rawStr, `"enabled": false`) {
+		t.Errorf("enabled was not set to false in raw JSON:\n%s", rawStr)
+	}
+
+	// Toggle back to true
+	if _, err := config.SetEnabled(cfgPath, true); err != nil {
+		t.Fatalf("SetEnabled(true) failed: %v", err)
+	}
+	loadedTrue, _, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load() failed: %v", err)
+	}
+	if !loadedTrue.Enabled {
+		t.Errorf("expected loaded config.Enabled to be true")
+	}
+}
+
+func TestSetEnabled_RejectsInvalidExistingConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// 1. Invalid JSON syntax
+	badSyntaxPath := filepath.Join(tmpDir, "badsyntax.json")
+	if err := os.WriteFile(badSyntaxPath, []byte(`{invalid-json`), 0644); err != nil {
+		t.Fatalf("failed to write bad syntax file: %v", err)
+	}
+	if _, err := config.SetEnabled(badSyntaxPath, false); err == nil {
+		t.Errorf("expected error when updating invalid JSON syntax, got nil")
+	}
+	// Verify bad file was NOT overwritten
+	data, _ := os.ReadFile(badSyntaxPath)
+	if string(data) != `{invalid-json` {
+		t.Errorf("bad syntax file was overwritten: %s", string(data))
+	}
+
+	// 2. Semantic validation failure (volume > 1.0)
+	invalidValPath := filepath.Join(tmpDir, "invalidval.json")
+	invalidJSON := `{"version": 1, "enabled": true, "volume": 5.0, "cooldown_ms": 1000, "max_clip_ms": 15000}`
+	if err := os.WriteFile(invalidValPath, []byte(invalidJSON), 0644); err != nil {
+		t.Fatalf("failed to write invalid validation file: %v", err)
+	}
+	if _, err := config.SetEnabled(invalidValPath, false); err == nil {
+		t.Errorf("expected error when updating semantically invalid config, got nil")
+	}
+	dataVal, _ := os.ReadFile(invalidValPath)
+	if string(dataVal) != invalidJSON {
+		t.Errorf("invalid validation file was overwritten: %s", string(dataVal))
+	}
+}
+
+func TestSetEnabled_CreatesDefaultIfMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	missingPath := filepath.Join(tmpDir, "nested", "config.json")
+
+	p, err := config.SetEnabled(missingPath, false)
+	if err != nil {
+		t.Fatalf("SetEnabled on missing file failed: %v", err)
+	}
+	if p != missingPath {
+		t.Errorf("expected path %s, got %s", missingPath, p)
+	}
+
+	cfg, _, err := config.Load(missingPath)
+	if err != nil {
+		t.Fatalf("Load on created file failed: %v", err)
+	}
+	if cfg.Enabled {
+		t.Errorf("expected created config to have Enabled: false")
+	}
+	if cfg.Volume != config.DefaultVolume {
+		t.Errorf("expected default volume %v, got %v", config.DefaultVolume, cfg.Volume)
+	}
+}
+
+func TestSetEnabled_ConcurrentUpdates(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := filepath.Join(tmpDir, "concurrent_config.json")
+
+	// Create initial config
+	if _, err := config.SetEnabled(cfgPath, true); err != nil {
+		t.Fatalf("initial SetEnabled failed: %v", err)
+	}
+
+	const goroutines = 20
+	errCh := make(chan error, goroutines)
+
+	for i := 0; i < goroutines; i++ {
+		go func(idx int) {
+			targetState := (idx%2 == 0)
+			_, err := config.SetEnabled(cfgPath, targetState)
+			errCh <- err
+		}(i)
+	}
+
+	for i := 0; i < goroutines; i++ {
+		if err := <-errCh; err != nil {
+			t.Errorf("concurrent SetEnabled failed: %v", err)
+		}
+	}
+
+	// Final file must be valid JSON and readable
+	cfg, _, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("config corrupted after concurrent writes: %v", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("config invalid after concurrent writes: %v", err)
+	}
+}
+
+func containsString(s, substr string) bool {
+	return filepath.Clean(s) != "" && len(s) >= len(substr) && stringContains(s, substr)
+}
+
+func stringContains(s, substr string) bool {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

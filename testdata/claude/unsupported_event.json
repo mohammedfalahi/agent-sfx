@@ -1,0 +1,8 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_response": {
+    "stdout": "tests ran ok"
+  }
+}

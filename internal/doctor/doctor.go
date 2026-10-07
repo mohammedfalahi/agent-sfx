@@ -30,6 +30,7 @@ type WorkerReport struct {
 	Running    bool   `json:"running"`
 	PID        int    `json:"pid,omitempty"`
 	UptimeSec  int64  `json:"uptime_sec,omitempty"`
+	Enabled    bool   `json:"enabled"`
 	SocketPath string `json:"socket_path"`
 }
 
@@ -66,7 +67,7 @@ func GenerateReport(customConfigPath, customSoundsDir string) Report {
 		SoundAssets: make(map[events.EventKind]EventSoundReport),
 		Adapters: map[string]string{
 			"gemini": "implemented (Milestone M1 - neutral receiver active, full classification in M2)",
-			"claude": "planned (Milestone M5 - hooks adapter)",
+			"claude": "implemented (Milestone M5 - neutral receiver active, event classification in M5)",
 		},
 	}
 
@@ -112,6 +113,7 @@ func GenerateReport(customConfigPath, customSoundsDir string) Report {
 			rep.Worker.Running = true
 			rep.Worker.PID = status.PID
 			rep.Worker.UptimeSec = status.Uptime
+			rep.Worker.Enabled = status.Enabled
 		}
 	}
 
@@ -179,8 +181,12 @@ func (r *Report) FormatHuman() string {
 	if !r.Worker.Supported {
 		fmt.Fprintf(&b, "Worker Daemon: unsupported on %s\n", r.OS)
 	} else if r.Worker.Running {
-		fmt.Fprintf(&b, "Worker Daemon: running [PID: %d, uptime: %ds, socket: %s]\n",
-			r.Worker.PID, r.Worker.UptimeSec, r.Worker.SocketPath)
+		muteInfo := ""
+		if !r.Worker.Enabled {
+			muteInfo = " (live audio muted)"
+		}
+		fmt.Fprintf(&b, "Worker Daemon: running [PID: %d, uptime: %ds, socket: %s]%s\n",
+			r.Worker.PID, r.Worker.UptimeSec, r.Worker.SocketPath, muteInfo)
 	} else {
 		fmt.Fprintf(&b, "Worker Daemon: stopped [socket: %s]\n", r.Worker.SocketPath)
 	}

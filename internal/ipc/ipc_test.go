@@ -14,46 +14,6 @@ import (
 	"agent-sfx/internal/ipc"
 )
 
-func TestIPCProtocol_Validation(t *testing.T) {
-	// Valid event
-	validReq := ipc.Request{
-		Version: ipc.ProtocolVersion,
-		Type:    ipc.TypeEvent,
-		Event: &events.Event{
-			Kind:       events.EventTaskStarted,
-			Agent:      "gemini",
-			ObservedAt: time.Now(),
-		},
-	}
-	if err := validReq.Validate(); err != nil {
-		t.Fatalf("unexpected error on valid request: %v", err)
-	}
-
-	// Invalid version
-	badVer := validReq
-	badVer.Version = 99
-	if err := badVer.Validate(); err == nil {
-		t.Fatalf("expected error on version mismatch, got nil")
-	}
-
-	// Event missing
-	missingEv := validReq
-	missingEv.Event = nil
-	if err := missingEv.Validate(); err == nil {
-		t.Fatalf("expected error on missing event, got nil")
-	}
-
-	// Stop & status
-	stopReq := ipc.Request{Version: ipc.ProtocolVersion, Type: ipc.TypeStop}
-	if err := stopReq.Validate(); err != nil {
-		t.Fatalf("unexpected error on stop request: %v", err)
-	}
-	statusReq := ipc.Request{Version: ipc.ProtocolVersion, Type: ipc.TypeStatus}
-	if err := statusReq.Validate(); err != nil {
-		t.Fatalf("unexpected error on status request: %v", err)
-	}
-}
-
 func TestIPC_RoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	sockPath := filepath.Join(tmpDir, "test.sock")

@@ -1,0 +1,11 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_use_id": "toolu_04JKL",
+  "tool_input": {
+    "command": "cat /nonexistent/file.txt"
+  },
+  "error": "No such file or directory",
+  "is_interrupt": false
+}

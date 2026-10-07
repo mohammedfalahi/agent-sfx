@@ -27,6 +27,13 @@ type NotificationPayload struct {
 	Details          json.RawMessage `json:"details"`
 }
 
+// BeforeToolPayload represents the BeforeTool hook input.
+type BeforeToolPayload struct {
+	GeminiBaseEnvelope
+	ToolName  string          `json:"tool_name"`
+	ToolInput json.RawMessage `json:"tool_input"`
+}
+
 // ToolResponse represents the execution response structure inside AfterTool.
 type ToolResponse struct {
 	LLMContent    json.RawMessage `json:"llmContent"`
@@ -143,6 +150,100 @@ func parseShellExitCode(llmContentRaw json.RawMessage) (bool, int) {
 	return false, 0
 }
 
+// isAskUserNotification inspects Notification details to determine if it represents
+// an ask_user dialog confirmation rather than a genuine tool permission request.
+// In Gemini CLI 0.62.0, interactive question dialogs emit NotificationType == ToolPermission
+// with details.type == "ask_user".
+func isAskUserNotification(detailsRaw json.RawMessage) bool {
+	if len(detailsRaw) == 0 {
+		return false
+	}
+	var details struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(detailsRaw, &details); err != nil {
+		return false
+	}
+	return details.Type == "ask_user"
+}
+
+// validateAskUserPayload validates tool_input against the Gemini CLI 0.62.0 ask_user tool schema.
+// Enforces native constraints:
+// - questions: required array of 1 to 4 question objects
+// - each question:
+//   - question: required non-empty string
+//   - header: required non-empty string
+//   - type: optional enum ("choice", "text", "yesno"); defaults to "choice"
+//   - if type == "choice": requires options array with 2-4 items, each with non-empty label and valid description string
+//   - if type == "text" or "yesno": options not required, but if provided each option must have non-empty label and valid description string
+func validateAskUserPayload(rawInput json.RawMessage) bool {
+	if len(rawInput) == 0 {
+		return false
+	}
+	var input struct {
+		Questions []struct {
+			Question *string `json:"question"`
+			Header   *string `json:"header"`
+			Type     *string `json:"type"`
+			Options  *[]struct {
+				Label       *string `json:"label"`
+				Description *string `json:"description"`
+			} `json:"options"`
+		} `json:"questions"`
+	}
+	if err := json.Unmarshal(rawInput, &input); err != nil {
+		return false
+	}
+
+	if len(input.Questions) < 1 || len(input.Questions) > 4 {
+		return false
+	}
+
+	for _, q := range input.Questions {
+		if q.Question == nil || strings.TrimSpace(*q.Question) == "" {
+			return false
+		}
+		if q.Header == nil || strings.TrimSpace(*q.Header) == "" {
+			return false
+		}
+
+		qType := "choice"
+		if q.Type != nil {
+			qType = strings.TrimSpace(*q.Type)
+		}
+
+		switch qType {
+		case "choice":
+			if q.Options == nil || len(*q.Options) < 2 || len(*q.Options) > 4 {
+				return false
+			}
+			for _, opt := range *q.Options {
+				if opt.Label == nil || strings.TrimSpace(*opt.Label) == "" {
+					return false
+				}
+				if opt.Description == nil {
+					return false
+				}
+			}
+		case "text", "yesno":
+			if q.Options != nil {
+				for _, opt := range *q.Options {
+					if opt.Label == nil || strings.TrimSpace(*opt.Label) == "" {
+						return false
+					}
+					if opt.Description == nil {
+						return false
+					}
+				}
+			}
+		default:
+			return false
+		}
+	}
+
+	return true
+}
+
 // Normalize parses raw Gemini hook stdin JSON and maps it to a canonical Event.
 // Returns nil, nil if the event is unsupported or should produce no audio.
 // Unknown shapes or missing required fields are ignored without guessing.
@@ -188,6 +289,13 @@ func Normalize(payload []byte) (*events.Event, error) {
 			return nil, fmt.Errorf("failed to parse Notification payload: %w", err)
 		}
 		if notif.NotificationType == "ToolPermission" {
+			// Suppress permission_requested ONLY when verified Notification payload contains details.type == "ask_user".
+			// In Gemini CLI 0.62.0, notifyHooks fires ToolPermission for question dialogs with details.type == "ask_user".
+			// All other ToolPermission notifications (and malformed/unrecognized details) preserve permission_requested.
+			if isAskUserNotification(notif.Details) {
+				return nil, nil
+			}
+
 			return &events.Event{
 				Kind:       events.EventPermissionRequested,
 				Agent:      "gemini",
@@ -196,6 +304,32 @@ func Normalize(payload []byte) (*events.Event, error) {
 				DedupeKey:  fmt.Sprintf("permission:%s", base.Timestamp),
 			}, nil
 		}
+		return nil, nil
+
+	case "BeforeTool":
+		var beforeTool BeforeToolPayload
+		if err := json.Unmarshal(payload, &beforeTool); err != nil {
+			return nil, fmt.Errorf("failed to parse BeforeTool payload: %w", err)
+		}
+
+		// Note: BeforeTool signals a question-tool request from the model, not proof
+		// that the dialog was displayed (a later hook or policy may block it).
+		// Note on dedupe: base.Timestamp is the hook event creation timestamp, not a persistent
+		// invocation ID (Gemini CLI does not supply call_id in BeforeTool hook payloads).
+		// DedupeKey with base.Timestamp covers identical payload replays without hashing question content.
+		if beforeTool.ToolName == "ask_user" {
+			if validateAskUserPayload(beforeTool.ToolInput) {
+				return &events.Event{
+					Kind:       events.EventWaitingForUser,
+					Agent:      "gemini",
+					SessionID:  base.SessionID,
+					ObservedAt: observedAt,
+					DedupeKey:  fmt.Sprintf("waiting_for_user:%s", base.Timestamp),
+					ReasonCode: "ask_user",
+				}, nil
+			}
+		}
+
 		return nil, nil
 
 	case "AfterTool":

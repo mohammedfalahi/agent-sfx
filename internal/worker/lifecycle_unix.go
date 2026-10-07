@@ -33,6 +33,26 @@ func StatusDaemon(socketPath string) (*ipc.Response, error) {
 	return resp, nil
 }
 
+// SetWorkerEnabled instructs an existing worker to enable or disable audio via IPC.
+// It does not spawn a new worker if absent.
+func SetWorkerEnabled(socketPath string, enabled bool) (*ipc.Response, error) {
+	msgType := ipc.TypeEnable
+	if !enabled {
+		msgType = ipc.TypeDisable
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+
+	resp, err := ipc.Send(ctx, socketPath, ipc.Request{
+		Version: ipc.ProtocolVersion,
+		Type:    msgType,
+	})
+	if err != nil {
+		return nil, ErrWorkerNotRunning
+	}
+	return resp, nil
+}
+
 // StopDaemon instructs the worker to shut down via its owned IPC endpoint.
 func StopDaemon(socketPath string) (*ipc.Response, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
@@ -87,6 +107,7 @@ func SpawnDetachedWorker(binaryPath, socketPath, configPath, soundsDir string) e
 
 	cmd := exec.Command(binaryPath, args...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	cmd.Env = append(os.Environ(), fmt.Sprintf("AGENT_SFX_SOCKET_PATH=%s", socketPath))
 	// Close and redirect stdio to prevent pipe inheritance
 	cmd.Stdin = nil
 	cmd.Stdout = nil

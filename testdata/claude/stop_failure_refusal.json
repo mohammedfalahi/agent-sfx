@@ -1,0 +1,5 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "StopFailure",
+  "error": "I cannot fulfill this request because it violates safety guidelines."
+}

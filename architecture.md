@@ -86,15 +86,25 @@ Verify every row against the installed version and fixtures before enabling it.
 
 | Product event | Initial signal | Release claim |
 | --- | --- | --- |
-| permission_requested | Notification.notification_type == ToolPermission | Documented direct signal; verify actual payload |
+| permission_requested | Notification.notification_type == ToolPermission | Documented direct signal; suppressed when details.type == "ask_user" |
 | task_started | BeforeAgent | User prompt/turn starts, not session startup |
 | task_finished | AfterAgent | Response/turn ends, not guaranteed task success |
-| waiting_for_user | No general signal confirmed in the audited hook reference | Unsupported initially; add only a verified explicit input/question event |
+| waiting_for_user | BeforeTool.tool_name == "ask_user" with validated schema | Explicit question dialog requested (M4); generic idle time unsupported |
 | tests_passed | Verified AfterTool result for recognized direct Go test or pytest runner | Direct runner invocation with verified successful completion and positive test summary (M3) |
 | usage_exhausted | No dedicated Gemini hook confirmed | Unsupported initially; evaluate local telemetry/API error source later |
 | error | AfterTool.tool_response.error when present | Tool errors only initially, not every possible runtime/API error |
 
 Do not copy peon-ping's Gemini top-level exit_code assumption, successful AfterTool -> Stop mapping, or discarded notification subtype. Its documented sound category resource.limit is not authoritative remaining quota.
+
+For explicit question detection (M4):
+- Detects the Gemini CLI 0.62.0 dedicated `ask_user` tool invocation via `BeforeTool` with anchored matcher `^ask_user$`.
+- Validates the installed tool's actual schema: questions array with 1 to 4 items, non-empty `question` and `header`, supported types (`choice`, `text`, `yesno`), and for `choice` type requires 2 to 4 options each with non-empty `label` and valid `description`.
+- Emits exactly one `waiting_for_user` event per invocation, never one per question.
+- Invariant & Limitation: `BeforeTool` signals a question-tool request from the model, not proof that the dialog was displayed (a later hook or policy may block it).
+- Deduplication: `base.Timestamp` is the hook event creation timestamp, not a persistent tool call ID. Deduplication with `base.Timestamp` covers identical payload replays without hashing or retaining question content.
+- Collision avoidance: when presenting an `ask_user` dialog, Gemini CLI's `notifyHooks` fires `Notification` with `notification_type: "ToolPermission"` and `details: { type: "ask_user", ... }`. Agent SFX explicitly inspects `details.type` and suppresses `permission_requested` for `ask_user` so that no duplicate permission sound plays.
+- AfterTool completion: successful answers and user dismissal emit no sound. Genuine structured errors on `ask_user` retain existing `error` classification.
+- Generic waiting or terminal idle detection remains explicitly unsupported.
 
 For tests_passed (M3): supports direct `go test` and `pytest` (`pytest`, `python -m pytest`, `python3 -m pytest`). Requires verified successful command completion (`Process Group PGID: <pid>` present in trailing metadata, no signal, no exit code, no error section, no cancellation, and not backgrounded).
 - For Go: requires at least one qualifying passed package (`ok <pkg> <duration>`). Excludes individual packages marked `[no test files]` or `[no tests to run]`. Cached passes (`ok <pkg> (cached)`) are classified with reason code `go_test_cached`; runs with newly executed tests use `go_test_passed`. Rejects `[build failed]`, syntax errors, panics, or any package failure.

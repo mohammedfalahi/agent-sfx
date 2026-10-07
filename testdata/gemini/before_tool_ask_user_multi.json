@@ -1,0 +1,33 @@
+{
+  "session_id": "test-session-123",
+  "transcript_path": "/tmp/transcript.json",
+  "cwd": "/workspace",
+  "hook_event_name": "BeforeTool",
+  "timestamp": "2026-10-04T12:00:00Z",
+  "tool_name": "ask_user",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Which database would you like to use?",
+        "header": "Database",
+        "type": "choice",
+        "options": [
+          {
+            "label": "PostgreSQL",
+            "description": "Powerful, open source object-relational database system."
+          },
+          {
+            "label": "SQLite",
+            "description": "C-library that implements a SQL database engine."
+          }
+        ]
+      },
+      {
+        "question": "What is the name of your new project?",
+        "header": "Project Name",
+        "type": "text",
+        "placeholder": "my-awesome-app"
+      }
+    ]
+  }
+}

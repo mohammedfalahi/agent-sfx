@@ -1,0 +1,12 @@
+{
+  "session_id": "sess-claude-01",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Proceed with deployment?"
+      }
+    ]
+  }
+}

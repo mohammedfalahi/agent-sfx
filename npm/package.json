@@ -1,0 +1,31 @@
+{
+  "name": "@agent-sfx/agent-sfx",
+  "version": "0.1.0",
+  "description": "Local sound accessory for terminal coding agents",
+  "license": "MIT",
+  "bin": {
+    "agent-sfx": "bin/run.js"
+  },
+  "files": [
+    "bin/",
+    "sounds/",
+    "gemini-extension.json",
+    "hooks/",
+    "skills/",
+    "claude/",
+    "README.md",
+    "SOUND-LICENSES.md",
+    "LICENSE"
+  ],
+  "os": [
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "arm64",
+    "x64"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

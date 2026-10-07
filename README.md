@@ -31,12 +31,30 @@ No unprompted sounds (no startup greetings, compaction noise, or periodic naggin
   Gracefully stops the active worker daemon via its owned IPC endpoint.
 - **`agent-sfx worker status`**
   Queries the running worker daemon for PID, uptime, active sound state, and socket path.
+- **`agent-sfx on [--config <path>]`**
+  Enables sound playback. Atomically updates persisted configuration, preserves unknown fields and exact numeric precision, and re-enables live worker playback without spawning an absent worker.
+- **`agent-sfx off [--config <path>]`**
+  Disables sound playback. Atomically updates persisted configuration and acknowledges live worker muting (cancels active playback, clears pending queue, resets cooldown) while keeping the daemon alive.
+- **`agent-sfx status [--config <path>] [--json]`**
+  Displays current status distinguishing persisted configuration state from running worker daemon state (PID, uptime, live audio enabled/muted, and active playback state).
 - **`agent-sfx hook gemini`**
   Verified hook receiver for Gemini CLI (v0.62.0). Reads stdin with time and size limits (max 1 MiB), maps verified events, emits exactly `{}` with a newline on stdout, and exits `0`.
 - **`agent-sfx install gemini [--scope project|user] [--dry-run]`**
   Installs owned hook definitions into `.gemini/settings.json` (project scope default) or `~/.gemini/settings.json` (user scope). Features atomic writes, backup preservation (`settings.json.bak`), platform-safe shell quoting, and conflict detection.
 - **`agent-sfx uninstall gemini [--scope project|user] [--dry-run]`**
   Removes only exact owned hooks whose commands match this installation. Preserves user-customized hooks and reports conflicts.
+- **`agent-sfx setup gemini --dry-run`**
+  Performs read-only inspection of manual hooks and extension status, detects duplicate integration risks in both directions, and plans safe migration without modifying settings.
+
+---
+
+## Distribution Packaging & npm Scaffold
+
+Agent SFX provides an npm distribution package (`@agent-sfx/agent-sfx`) containing prebuilt macOS binaries and starter sound assets:
+- **Prerequisites**: macOS (`darwin-arm64`, `darwin-x64`) and Node.js >= 18.0.0.
+- **Network Requirement**: No additional install-script downloads; npm package acquisition still requires a download unless supplied locally.
+- **Self-Contained Launcher**: `bin/run.js` automatically routes to the appropriate prebuilt Go executable using safe argument arrays (`spawnSync`), safely handling package paths with spaces and metacharacters.
+- **Asset Provenance**: The package bundles only the 7 original software-generated CC0 sound assets; user meme clips and custom files are excluded.
 
 ---
 
@@ -46,16 +64,54 @@ No unprompted sounds (no startup greetings, compaction noise, or periodic naggin
 | :--- | :--- | :--- | :--- |
 | `BeforeAgent` | Any valid prompt turn | `task_started` | User prompt submitted; turn starts |
 | `AfterAgent` | `stop_hook_active == false` | `task_finished` | Agent response/turn complete (does not guarantee overall task success) |
-| `Notification` | `notification_type == "ToolPermission"` | `permission_requested` | Agent pauses for user permission on a tool call |
+| `Notification` | `notification_type == "ToolPermission"` (excluding `details.type == "ask_user"`) | `permission_requested` | Agent pauses for user permission on a tool call (dialog collision suppressed) |
+| `BeforeTool` | `tool_name == "ask_user"` with validated schema | `waiting_for_user` | Explicit question dialog requested (M4); anchored matcher `^ask_user$` |
 | `AfterTool` | `tool_response.error` is non-empty, or `run_shell_command` non-zero `Exit Code` in trailing metadata | `error` | Tool execution failure across all tools, or verified non-zero shell exit code (not output text) |
 | `AfterTool` | Verified direct `go test` or `pytest` invocation with positive test summary | `tests_passed` | Requires verified complete command execution and qualifying passed tests (M3) |
-| `AfterTool` | Successful non-test tool result | *(none / dropped)* | Ordinary successful tool calls do not trigger completion sounds |
+| `AfterTool` | Successful non-test tool result or normal `ask_user` answer/dismissal | *(none / dropped)* | Ordinary successful tool calls do not trigger completion sounds |
 | `SessionStart` | `source: "startup"` | *(none)* | Silently launches background worker if offline without blocking agent |
-| `BeforeTool` | Any | *(unsupported)* | Ignored |
 | `AfterModel` | Any | *(unsupported)* | Ignored |
 | `PreCompress` | Any | *(unsupported)* | Ignored |
-| — | General API exhaustion | *(unsupported in M3)* | Unobserved API errors and quota are not guessed |
-| — | Waiting for input | *(unsupported in M3)* | Generic wait signal not present in hook schema |
+| — | General API exhaustion | *(unsupported initially)* | Unobserved API errors and quota are not guessed |
+| — | General idle waiting | *(unsupported)* | Generic waiting or silence is not detected; only explicit question dialogs via `ask_user` are supported |
+
+---
+
+## Claude Code Support Matrix (CLI v2.1.162)
+
+*Status: Implemented & automated verification complete (adapter normalization, verified StopFailure allowlist, neutral hook receiver `agent-sfx hook claude`, self-contained plugin packaging in `npm/claude/`, local marketplace manifest, and `agent-sfx setup claude --dry-run`). Live event, audio, and management-skill verification in an authenticated session are pending future tester access.*
+
+| Claude Hook Event | Payload Match Condition | Canonical SFX Event | Notes |
+| :--- | :--- | :--- | :--- |
+| `UserPromptSubmit` | Any valid prompt turn | `task_started` | User prompt submitted; turn starts |
+| `Stop` | `stop_hook_active == false` | `task_finished` | Response/turn complete (does not guarantee overall task success) |
+| `PermissionRequest` | `tool_name != "AskUserQuestion"` | `permission_requested` | Hook executed before presenting tool permission prompt; suppressed when `tool_name == "AskUserQuestion"` |
+| `PreToolUse` | `tool_name == "AskUserQuestion"` with validated schema | `waiting_for_user` | Explicit question dialog requested; validated against native schema; all other tools produce 0 events |
+| `PostToolUseFailure` | Non-empty `error` and `is_interrupt == false` | `error` | Tool execution failure across all tools; user cancellations (`is_interrupt == true`) produce no sound |
+| `StopFailure` | Exact match against verified 10-value enum | `error` | Source- and fixture-tested against Claude Code 2.1.162 binary schema (`rate_limit`, `overloaded`, `authentication_failed`, `oauth_org_not_allowed`, `billing_error`, `invalid_request`, `model_not_found`, `server_error`, `max_output_tokens`, `unknown`); prose and model refusals strictly rejected; live API failure unconfirmed |
+| `SessionStart` | Any valid session start | *(none)* | Silently launches background worker if offline without blocking agent |
+| — | Tool execution output (`Bash`) | *(unsupported)* | Direct shell output parsing differs from Gemini metadata; `tests_passed` remains explicitly unsupported |
+| — | Billing / Quota zero | *(unsupported)* | Claude Code lacks a dedicated quota exhaustion hook; `usage_exhausted` remains explicitly unsupported |
+
+---
+
+## Explicit Question Detection (Milestone M4)
+
+Agent SFX recognizes explicit user-question dialogs triggered by Gemini CLI:
+- **Hook Event**: Detected via `BeforeTool` with anchored matcher `^ask_user$`.
+- **Schema Validation**: Strictly validates against Gemini CLI 0.62.0's native schema:
+  - `questions` array with 1 to 4 question objects.
+  - Required non-empty `question` and `header` strings.
+  - Supported question types: `choice` (default), `text`, and `yesno`.
+  - For `choice`: requires 2 to 4 options, each with non-empty `label` and valid `description`.
+  - Missing, empty, malformed, or unsupported question inputs produce no sound.
+- **Single Event**: Emits exactly one `waiting_for_user` event per invocation, regardless of question count.
+- **Invariants & Limitations**:
+  - `BeforeTool` signals a question-tool request from the model, not proof that the dialog was displayed (a later hook or policy may block it).
+  - Deduplication: `base.Timestamp` is the hook event creation timestamp, not a persistent tool call ID. Deduplication covers identical payload replays without hashing question content.
+  - Collision Avoidance: Gemini CLI emits `NotificationType == "ToolPermission"` with `details: {"type": "ask_user", ...}` during confirmation. Agent SFX inspects `details.type` and suppresses `permission_requested` so that no duplicate permission sound is triggered.
+  - `AfterTool` for `ask_user`: user answers and dialog dismissal produce no second sound; genuine structured errors retain standard `error` classification.
+  - Generic waiting detection (e.g. inference from terminal silence or prose questions) is explicitly unsupported.
 
 ---
 
@@ -109,37 +165,79 @@ Agent SFX reads configuration from `os.UserConfigDir()/agent-sfx/config.json` (o
 
 ## Platform Verification & Limitations
 
-- **macOS (`darwin/arm64`)**: Fully verified on local hardware (audio playback via `afplay`, Unix domain socket IPC, `flock` singleton locking, process detachment, and settings installation).
-- **Linux (`linux/amd64`)**: Cross-compilation verified. POSIX-compliant socket and locking primitives implemented.
-- **Windows (`windows/amd64`)**: Cross-compilation verified. Background worker and hook installation remain disabled/stubbed pending Windows named-pipe IPC implementation. *Cross-compilation verifies only build compatibility, not runtime verification.*
+- **macOS (`darwin/arm64`, `darwin/x64`)**: Fully verified on local hardware (audio playback via `afplay`, Unix domain socket IPC, `flock` singleton locking, process detachment, settings installation, and npm launcher execution).
+- **Linux (`linux/amd64`)**: Cross-compilation verified. POSIX-compliant socket and locking primitives implemented; audio backend detection for `pw-play`, `paplay`, and `aplay`.
+- **Windows (`windows/amd64` / `win32-x64`)**: Full architecture implemented and cross-compiled (named-pipe IPC with user SID DACL, atomic singleton locking via `LockFileEx`, hidden PowerShell player using `Media.SoundPlayer` and `CREATE_NO_WINDOW`, Node launcher support). Cross-compilation and automated unit tests pass; physical Windows audible playback and separate-process contention remain pending physical Windows host verification.
 
 ---
 
 ## Quick Start & Verification
 
-### Building
-```bash
-go build -o bin/agent-sfx ./cmd/agent-sfx
-```
+### 1. Building from Source
 
-### Inspecting Proposed Hook Installation (Dry-Run)
-```bash
-./bin/agent-sfx install gemini --dry-run
-```
+- **macOS / Linux**:
+  ```bash
+  go build -o bin/agent-sfx ./cmd/agent-sfx
+  ```
+- **Windows PowerShell**:
+  ```powershell
+  go build -o bin\agent-sfx.exe .\cmd\agent-sfx
+  ```
 
-### Installing Hooks
-```bash
-./bin/agent-sfx install gemini
-```
+### 2. Environment Diagnostics & Audio Preview
 
-### Testing Gemini Hook Receiver
-```bash
-# Valid BeforeAgent turn
-echo '{"hook_event_name": "BeforeAgent", "session_id": "test", "timestamp": "2026-10-04T12:00:00Z"}' | ./bin/agent-sfx hook gemini
-# Output is always "{}" with exit code 0
-```
+- **Run Diagnostics**:
+  ```bash
+  ./bin/agent-sfx doctor
+  ```
+- **Preview Audio Playback**:
+  ```bash
+  ./bin/agent-sfx preview task_finished
+  ```
+  *(On Windows, run `.\bin\agent-sfx.exe doctor` and `.\bin\agent-sfx.exe preview task_finished`)*.
 
-### Uninstalling Hooks
-```bash
-./bin/agent-sfx uninstall gemini
-```
+### 3. Gemini CLI Integration
+
+- **Inspect Proposed Hook Installation (Dry-Run)**:
+  ```bash
+  ./bin/agent-sfx install gemini --dry-run
+  ```
+- **Install Hooks (Project Scope Default)**:
+  ```bash
+  ./bin/agent-sfx install gemini
+  ```
+- **Test Gemini Hook Receiver**:
+  ```bash
+  # Valid BeforeAgent turn: outputs "{}" and exits 0
+  echo '{"hook_event_name": "BeforeAgent", "session_id": "test", "timestamp": "2026-10-04T12:00:00Z"}' | ./bin/agent-sfx hook gemini
+  ```
+- **Uninstall Hooks**:
+  ```bash
+  ./bin/agent-sfx uninstall gemini
+  ```
+
+### 4. Background Worker & Sound Controls
+
+- **Start / Stop Worker Daemon**:
+  ```bash
+  ./bin/agent-sfx worker start
+  ./bin/agent-sfx worker status
+  ./bin/agent-sfx worker stop
+  ```
+- **Toggle Sound Playback**:
+  ```bash
+  ./bin/agent-sfx off    # Mutes sound playback and clears queue
+  ./bin/agent-sfx on     # Re-enables sound playback
+  ./bin/agent-sfx status # Checks configuration and live worker status
+  ```
+
+### 5. Claude Code Plugin & npm Package
+
+- **Claude Code Plugin**: Located in `npm/claude/` with dedicated hooks, skills, and CC0 sounds. See `npm/claude/README.md` and `TESTING-CLAUDE-WINDOWS.md` for setup and testing.
+- **npm Package**: Run via `npx @agent-sfx/agent-sfx doctor` or install from npm. See `npm/README.md`.
+
+For complete setup guides, troubleshooting, and architectural details, refer to:
+- [`SETUP.md`](SETUP.md) — Comprehensive setup, installation, and uninstallation guide.
+- [`SECURITY.md`](SECURITY.md) — Security policy, threat model, and IPC isolation.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — Contributor guide, coding standards, and tests.
+- [`SOUND-LICENSES.md`](SOUND-LICENSES.md) — CC0 audio license and mathematical synthesis details.

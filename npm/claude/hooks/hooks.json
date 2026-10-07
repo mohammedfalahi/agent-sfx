@@ -1,0 +1,88 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-session-start",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-user-prompt-submit",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-stop",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-permission-request",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "^AskUserQuestion$",
+        "hooks": [
+          {
+            "name": "agent-sfx-pre-tool-use",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-post-tool-use-failure",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "name": "agent-sfx-stop-failure",
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/bin/run.js\" hook claude"
+          }
+        ]
+      }
+    ]
+  }
+}
