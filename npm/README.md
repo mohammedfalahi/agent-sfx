@@ -10,39 +10,48 @@ Local sound accessory for terminal coding agents. Plays short, randomly selected
 
 ## Quick Start
 
-### Basic Commands
+### Running from a Repository Clone
 ```bash
 # Check environment, audio backend, and paths
-npx @agent-sfx/agent-sfx doctor
+node bin/run.js doctor
 
 # View status of config and background worker
-npx @agent-sfx/agent-sfx status
+node bin/run.js status
 
 # Toggle sound playback on or off
-npx @agent-sfx/agent-sfx on
-npx @agent-sfx/agent-sfx off
+node bin/run.js on
+node bin/run.js off
 
 # Preview an event sound manually
-npx @agent-sfx/agent-sfx preview task_finished
+node bin/run.js preview task_finished
 ```
 
-### Windows PowerShell
+### Windows PowerShell (from Clone)
 ```powershell
+node bin\run.js doctor
+node bin\run.js preview task_finished
+node bin\run.js status
+```
+
+### When Installed via npm (or via npx)
+Once published or installed via `npm install -g @agent-sfx/agent-sfx`:
+```bash
+agent-sfx doctor
+agent-sfx preview task_finished
+# Or via npx:
 npx @agent-sfx/agent-sfx doctor
-npx @agent-sfx/agent-sfx preview task_finished
-npx @agent-sfx/agent-sfx status
 ```
 
 ## Gemini CLI Integration
 To preview proposed integration changes without modifying settings:
 ```bash
-npx @agent-sfx/agent-sfx setup gemini --dry-run
+node bin/run.js setup gemini --dry-run
 ```
 
 To install or uninstall hooks directly:
 ```bash
-npx @agent-sfx/agent-sfx install gemini
-npx @agent-sfx/agent-sfx uninstall gemini
+node bin/run.js install gemini
+node bin/run.js uninstall gemini
 ```
 
 ## Claude Code Integration

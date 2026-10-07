@@ -116,7 +116,7 @@ Empirical source verification of installed Gemini CLI 0.62.0 (`/opt/homebrew/lib
   - Bundled skills are exposed as available agent skills (`activate_skill`), enabling agent-operated tool invocation (invoking CLI commands via `run_shell_command`).
 
 ## Claude Code plugin, hook, and event architecture (M5 Empirical Findings)
-Empirical investigation of installed Claude Code 2.1.162 (`/Users/falahi/.local/share/claude/versions/2.1.162`):
+Empirical investigation of installed Claude Code 2.1.162 (`~/.local/share/claude/versions/2.1.162`):
 - **Hook Events & Execution Flow**:
   - `UserPromptSubmit`: Fires when user submits a prompt turn. Carries `prompt` and `session_id`. Maps directly to `task_started`.
   - `Stop`: Fires on turn completion (including clear, resume, compact). Carries `stop_hook_active` and `last_assistant_message`. Maps directly to `task_finished` (turn completion only, not overall task success).
@@ -166,7 +166,7 @@ cp "$HOME/.claude/plugins/installed_plugins.json" "$SNAPSHOT_DIR/user_installed_
 Install within the target project scope to isolate changes to `.claude/settings.json`:
 ```bash
 # Register local marketplace catalog
-claude plugin marketplace add "/Users/falahi/funcode/npm/claude" --scope project
+claude plugin marketplace add "./npm/claude" --scope project
 
 # Install plugin into project
 claude plugin install agent-sfx@agent-sfx-local --scope project
@@ -211,7 +211,7 @@ claude plugin marketplace remove agent-sfx-local --scope project
 - **Test E: Sound Controls (Direct & Skill-Operated)**
   - Direct check: `node npm/claude/bin/run.js status`, `off`, `on`.
   - Skill check in Claude: `"Turn sound effects off"`, `"Check sound status"`, `"Turn sound effects on"`.
-  - Verify that `enabled: true` and `sounds_dir: "/Users/falahi/funcode/sounds"` are preserved in `~/Library/Application Support/agent-sfx/config.json`.
+  - Verify that `enabled: true` and active `sounds_dir` are preserved in `~/Library/Application Support/agent-sfx/config.json`.
 - **Observation Recording Rule**: Always record actual observed sounds and exit codes; never mark expected behavior as verified without empirical test runs.
 
 

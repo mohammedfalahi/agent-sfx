@@ -173,6 +173,8 @@ Agent SFX reads configuration from `os.UserConfigDir()/agent-sfx/config.json` (o
 
 ## Quick Start & Verification
 
+> **Getting Started**: For complete step-by-step setup, configuration, and uninstallation instructions, see **[`SETUP.md`](SETUP.md)**.
+
 ### 1. Building from Source
 
 - **macOS / Linux**:
@@ -231,10 +233,10 @@ Agent SFX reads configuration from `os.UserConfigDir()/agent-sfx/config.json` (o
   ./bin/agent-sfx status # Checks configuration and live worker status
   ```
 
-### 5. Claude Code Plugin & npm Package
+### 5. Claude Code Plugin & Local Node Launcher (Clone Usage)
 
-- **Claude Code Plugin**: Located in `npm/claude/` with dedicated hooks, skills, and CC0 sounds. See `npm/claude/README.md` and `TESTING-CLAUDE-WINDOWS.md` for setup and testing.
-- **npm Package**: Run via `npx @agent-sfx/agent-sfx doctor` or install from npm. See `npm/README.md`.
+- **Claude Code Plugin**: Located in `npm/claude/` with dedicated hooks, skills, prebuilt universal binaries, and CC0 starter sounds. See [`npm/claude/README.md`](npm/claude/README.md) and [`TESTING-CLAUDE-WINDOWS.md`](TESTING-CLAUDE-WINDOWS.md) for local installation and testing.
+- **Local Node Launcher**: If running from a clone without installing the Go binary into your PATH, you can execute commands directly with Node: `node npm/bin/run.js <command>` (e.g. `node npm/bin/run.js doctor`). See [`npm/README.md`](npm/README.md).
 
 For complete setup guides, troubleshooting, and architectural details, refer to:
 - [`SETUP.md`](SETUP.md) — Comprehensive setup, installation, and uninstallation guide.
