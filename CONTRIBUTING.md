@@ -39,9 +39,9 @@ Agent SFX is a free, open-source, local-only sound accessory for terminal coding
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/mohammedfalahi/AgentSFX.git
-   cd AgentSFX
-   # PowerShell: Set-Location AgentSFX
+   git clone https://github.com/mohammedfalahi/agent-sfx.git
+   cd agent-sfx
+   # PowerShell: Set-Location agent-sfx
    ```
 
 2. **Run tests**:

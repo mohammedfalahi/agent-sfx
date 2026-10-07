@@ -8,7 +8,7 @@ Agent SFX is a local, sound-only accessory for terminal coding agents. This docu
 
 If you discover a potential security vulnerability in Agent SFX, please do not open a public GitHub issue.
 
-- **Reporting Channel**: Please report vulnerabilities privately by emailing the maintainers or opening a private security advisory on GitHub at [https://github.com/mohammedfalahi/AgentSFX/security/advisories](https://github.com/mohammedfalahi/AgentSFX/security/advisories).
+- **Reporting Channel**: Please report vulnerabilities privately by emailing the maintainers or opening a private security advisory on GitHub at [https://github.com/mohammedfalahi/agent-sfx/security/advisories](https://github.com/mohammedfalahi/agent-sfx/security/advisories).
 - **Information to Include**:
   - Detailed description of the vulnerability and attack vector.
   - Minimal reproducible example or proof-of-concept payload.
