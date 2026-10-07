@@ -300,8 +300,8 @@ func (p *Plan) FormatDryRun() string {
 	fmt.Fprintf(&b, "Package Location : %s\n", p.PackageDir)
 	if p.IsEphemeralNpx {
 		fmt.Fprintf(&b, "  ! NOTICE: Invoked from an ephemeral path (e.g. npx cache).\n")
-		fmt.Fprintf(&b, "    For permanent integration, install globally via:\n")
-		fmt.Fprintf(&b, "    npm install -g @agent-sfx/agent-sfx\n")
+		fmt.Fprintf(&b, "    For permanent user-wide integration, deploy self-contained packages via:\n")
+		fmt.Fprintf(&b, "    agent-sfx setup deploy\n")
 	}
 
 	fmt.Fprintf(&b, "\nInspected Integrations:\n")

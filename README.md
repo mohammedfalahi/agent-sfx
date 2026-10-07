@@ -77,7 +77,7 @@ Adapter normalization, verified `StopFailure` enum filtering, neutral hook recei
 - **Node.js**: Version 18.0.0 or higher (required for Node launchers and Claude Code plugin execution).
 - **Operating Systems**: macOS (Apple Silicon `darwin/arm64` or Intel `darwin/x64`), Windows 64-bit (`windows/amd64`), or Linux 64-bit (`linux/amd64`).
 
-### Building from Source
+### 1. Building from Source
 
 ```bash
 # Clone repository
@@ -93,12 +93,25 @@ go build -o bin/agent-sfx ./cmd/agent-sfx
 go build -o bin\agent-sfx.exe .\cmd\agent-sfx
 ```
 
-### Direct Execution from Clone (via Node Launcher)
-If you prefer not to compile Go binaries manually, you can use the bundled Node launcher with prebuilt platform binaries:
+### 2. Recommended: One-Time User-Wide Setup
+Deploy complete, self-contained packages to your user application directory (`~/Library/Application Support/agent-sfx` on macOS, `%LOCALAPPDATA%\agent-sfx` on Windows) so Agent SFX operates across all terminal coding projects without adding files to any project workspace:
+
 ```bash
-node npm/bin/run.js doctor
-node npm/bin/run.js preview task_finished
+# Deploy self-contained extension and plugin packages to user directory
+./bin/agent-sfx setup deploy
+
+# Activate Gemini CLI extension (user-wide)
+gemini extensions link "$HOME/Library/Application Support/agent-sfx/gemini-extension"
+
+# Activate Claude Code plugin (user-wide)
+claude plugin marketplace add "$HOME/Library/Application Support/agent-sfx/claude-plugin" --scope user
+claude plugin install agent-sfx@agent-sfx-local --scope user
 ```
+*(On Windows PowerShell, use `.\bin\agent-sfx.exe setup deploy` and reference `$env:LOCALAPPDATA\agent-sfx\...`)*.
+
+### Project Overrides
+- **Gemini CLI**: If a workspace defines `.gemini/settings.json`, Gemini CLI merges project settings with user settings. Project-level hooks take precedence if conflicts exist.
+- **Claude Code**: If a workspace defines `.claude/settings.json`, you can disable the user plugin for that workspace via `{"enabledPlugins": {"agent-sfx@agent-sfx-local": false}}`.
 
 ---
 
@@ -116,9 +129,11 @@ node npm/bin/run.js preview task_finished
 | `agent-sfx worker start` | Starts the detached background sound worker daemon |
 | `agent-sfx worker status` | Inspects background worker daemon PID, uptime, and IPC socket |
 | `agent-sfx worker stop` | Gracefully stops the active background worker daemon |
-| `agent-sfx install gemini` | Merges owned hooks into `.gemini/settings.json` (supports `--dry-run`, `--scope`) |
+| `agent-sfx setup deploy` | Deploys self-contained packages to the permanent user application directory |
+| `agent-sfx setup gemini --dry-run` | Inspects Gemini CLI integrations, extensions, and migration plans |
+| `agent-sfx setup claude --dry-run` | Inspects Claude Code plugin integrations, marketplaces, and migration plans |
+| `agent-sfx install gemini` | Merges owned hooks into `.gemini/settings.json` (supports `--scope project|user`, `--dry-run`) |
 | `agent-sfx uninstall gemini` | Removes owned hooks cleanly while preserving user settings |
-| `agent-sfx setup gemini --dry-run` | Inspects manual hooks vs. extension status and reports migration plans |
 | `agent-sfx hook <agent>` | Neutral, fail-open hook receiver reading stdin from agent lifecycle events |
 
 ### Basic Workflow Example

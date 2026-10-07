@@ -7,7 +7,7 @@ Agent SFX is a local, open-source sound-only accessory for terminal coding agent
 ## Prerequisites
 
 - **Go**: Version 1.22 or higher (required for building from source).
-- **Node.js**: Version 18.0.0 or higher (required for npm launchers and Claude Code plugin execution).
+- **Node.js**: Version 18.0.0 or higher (required for Node launchers and Claude Code plugin execution).
 - **Git**: Modern git client.
 - **Operating Systems & Audio Backends**:
   - **macOS** (`darwin-arm64`, `darwin-x64`): Native playback via `/usr/bin/afplay`.
@@ -82,59 +82,87 @@ Test manual audio playback for each of the seven canonical events:
 
 ---
 
-## 3. Gemini CLI Integration
+## 3. Recommended: One-Time User-Wide Installation
 
-Agent SFX integrates natively with Gemini CLI (v0.62.0+) using its hook system.
+Agent SFX is designed to be installed **once per user machine**. You do not need to clone the repository into each project or add any Agent SFX files to your project repositories.
 
-### Step 1: Inspect Proposed Changes (Dry-Run)
-Inspect what hooks would be added to `.gemini/settings.json` without modifying any files:
-```bash
-./bin/agent-sfx install gemini --dry-run
-```
-Or run the two-way migration and conflict planner:
-```bash
-./bin/agent-sfx setup gemini --dry-run
-```
+### Step 1: Deploy Self-Contained Packages to User Location
+Deploy the self-contained Gemini extension and Claude plugin to your permanent user application directory (`~/Library/Application Support/agent-sfx` on macOS, `%LOCALAPPDATA%\agent-sfx` on Windows):
 
-### Step 2: Install Owned Hooks
-Install the verified hook definitions into your project settings (default) or user settings (`--scope user`):
-```bash
-# Project scope (recommended: writes to .gemini/settings.json with .bak backup)
-./bin/agent-sfx install gemini
+- **macOS / Linux**:
+  ```bash
+  # Preview planned deployment without modifying files
+  ./bin/agent-sfx setup deploy --dry-run
 
-# Or user scope (writes to ~/.gemini/settings.json)
-./bin/agent-sfx install gemini --scope user
-```
+  # Deploy packages
+  ./bin/agent-sfx setup deploy
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  # Preview planned deployment
+  .\bin\agent-sfx.exe setup deploy --dry-run
 
-### Step 3: Verify Hook Receiver
-Test the fail-open hook receiver with a mock prompt turn:
-```bash
-echo '{"hook_event_name": "BeforeAgent", "session_id": "test", "timestamp": "2026-10-04T12:00:00Z"}' | ./bin/agent-sfx hook gemini
-```
-Expected output: exactly `{}` on stdout and exit code `0`.
+  # Deploy packages
+  .\bin\agent-sfx.exe setup deploy
+  ```
+
+*This copies self-contained extension and plugin directories with their own binaries, hooks, and starter sounds into your user application directory. It never modifies your `config.json` or custom sound folders.*
+
+### Step 2: Activate Gemini CLI Extension (User-Wide)
+Link the deployed extension into Gemini CLI:
+
+- **macOS / Linux**:
+  ```bash
+  gemini extensions link "$HOME/Library/Application Support/agent-sfx/gemini-extension"
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  gemini extensions link "$env:LOCALAPPDATA\agent-sfx\gemini-extension"
+  ```
+
+Gemini CLI will now run Agent SFX hooks and provide the `/sfx` management skill across all terminal workspaces automatically.
+
+### Step 3: Activate Claude Code Plugin (User-Wide)
+Register the deployed plugin as a user-level marketplace in Claude Code:
+
+- **macOS / Linux**:
+  ```bash
+  claude plugin marketplace add "$HOME/Library/Application Support/agent-sfx/claude-plugin" --scope user
+  claude plugin install agent-sfx@agent-sfx-local --scope user
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  claude plugin marketplace add "$env:LOCALAPPDATA\agent-sfx\claude-plugin" --scope user
+  claude plugin install agent-sfx@agent-sfx-local --scope user
+  ```
+
+### Understanding Project Overrides
+- **Gemini CLI**: If a specific project defines `.gemini/settings.json`, Gemini CLI merges project settings with user settings. If project hooks conflict, project-specific settings take precedence.
+- **Claude Code**: If a project defines `.claude/settings.json`, it can disable the user plugin for that specific workspace via:
+  ```json
+  {
+    "enabledPlugins": {
+      "agent-sfx@agent-sfx-local": false
+    }
+  }
+  ```
 
 ---
 
-## 4. Claude Code Plugin Integration
+## 4. Optional: Project-Scoped Manual Hook Installation
 
-Agent SFX provides a self-contained Claude Code plugin inside `npm/claude/` featuring native hook definitions, prebuilt universal binaries, and CC0 starter sounds.
+If you prefer not to use extensions/plugins and want to install manual command hooks directly into a specific project workspace:
 
-### Step 1: Verify Plugin Diagnostics
+### Inspect Proposed Project Changes (Dry-Run)
 ```bash
-node npm/claude/bin/run.js doctor
-node npm/claude/bin/run.js preview task_finished
+./bin/agent-sfx install gemini --scope project --dry-run
 ```
 
-### Step 2: Register Local Marketplace & Install
-Within your Claude Code terminal interface:
-```text
-/plugin marketplace add ./npm/claude
-/plugin install agent-sfx@agent-sfx-local
+### Install Project Hooks
+```bash
+./bin/agent-sfx install gemini --scope project
 ```
-
-### Step 3: Testing & In-Turn Clearance
-- Agent SFX uses non-preemptive audio playback with a global cooldown (1,200 ms default).
-- When running live tests in Claude Code, incorporate explicit timing (e.g. `sleep 22` or `Start-Sleep -Seconds 22`) between actions so the turn-start sound clears before completion sounds trigger.
+*Note: This writes hook commands directly into `.gemini/settings.json` in the current working directory with an automatic `.bak` backup.*
 
 ---
 
@@ -153,7 +181,7 @@ Audio playback runs in an isolated, singleton background worker daemon so hook e
 # Stop the worker daemon gracefully
 ./bin/agent-sfx worker stop
 ```
-*(Note: With hooks installed, the worker starts automatically on `SessionStart` without delaying the agent).*
+*(Note: With the extension or plugin installed, the worker starts automatically on `SessionStart` without delaying the agent).*
 
 ### Sound Playback Controls
 Toggle playback at any time without terminating the daemon:
@@ -198,50 +226,59 @@ Example `config.json`:
 }
 ```
 
-### Adding Custom Sounds
-1. Find your active sounds folder (reported by `agent-sfx doctor`).
-2. Add uncompressed 16-bit PCM `.wav` files into the appropriate event subfolder:
-   - `sounds/permission_requested/`
-   - `sounds/task_started/`
-   - `sounds/task_finished/`
-   - `sounds/waiting_for_user/`
-   - `sounds/tests_passed/`
-   - `sounds/usage_exhausted/`
-   - `sounds/error/`
-3. If multiple WAV files exist in a folder, Agent SFX selects one randomly without immediate repeats.
-4. **Limits**: Max duration 15,000 ms (15 seconds); max file size 25 MiB.
+### Preserving Existing Sound Directories & Adding Custom Sounds
+- Your configured `sounds_dir` in `config.json` is always preserved and respected.
+- To add custom sounds, place uncompressed 16-bit PCM `.wav` files into your configured event subfolders:
+  - `sounds/permission_requested/`
+  - `sounds/task_started/`
+  - `sounds/task_finished/`
+  - `sounds/waiting_for_user/`
+  - `sounds/tests_passed/`
+  - `sounds/usage_exhausted/`
+  - `sounds/error/`
+- If multiple WAV files exist in an event folder, Agent SFX selects one randomly without immediate repeats.
+- **Constraints**: Maximum duration 15,000 ms (15 seconds); maximum file size 25 MiB.
 
 ---
 
 ## 7. Clean Uninstallation and Rollback
 
-### Uninstall Gemini CLI Hooks
+### Remove User-Wide Integrations
+- **Gemini Extension**:
+  ```bash
+  gemini extensions unlink agent-sfx
+  ```
+- **Claude Code Plugin**:
+  ```bash
+  claude plugin uninstall agent-sfx@agent-sfx-local --scope user
+  claude plugin marketplace remove agent-sfx-local --scope user
+  ```
+
+### Remove Project-Scoped Hooks (if installed)
 ```bash
-# Remove project-scoped hooks
-./bin/agent-sfx uninstall gemini
-
-# Or remove user-scoped hooks
-./bin/agent-sfx uninstall gemini --scope user
+./bin/agent-sfx uninstall gemini --scope project
 ```
-*The uninstaller removes only exact owned hooks whose binary paths match this installation, preserving user hooks and other settings.*
-
-### Uninstall Claude Code Plugin
-Inside Claude Code:
-```text
-/plugin uninstall agent-sfx@agent-sfx-local
-/plugin marketplace remove agent-sfx-local
-```
+*The uninstaller removes only exact verified owned hooks whose binary and command signatures match, preserving user-customized hooks and unrelated settings.*
 
 ### Stop Background Daemon & Clean State
 ```bash
 # Stop daemon
 ./bin/agent-sfx worker stop
 
-# Remove local config and cache (optional)
+# Remove deployed packages (optional)
 # macOS:
-rm -rf ~/Library/Application\ Support/agent-sfx
-rm -rf ~/Library/Caches/agent-sfx
+rm -rf ~/Library/Application\ Support/agent-sfx/gemini-extension
+rm -rf ~/Library/Application\ Support/agent-sfx/claude-plugin
 
 # Windows:
-# Remove-Item -Recurse -Force "$env:LOCALAPPDATA\agent-sfx"
+# Remove-Item -Recurse -Force "$env:LOCALAPPDATA\agent-sfx\gemini-extension"
+# Remove-Item -Recurse -Force "$env:LOCALAPPDATA\agent-sfx\claude-plugin"
 ```
+
+---
+
+## 8. Platform Support & Verification Status
+
+- **macOS (`arm64`, `x64`)**: Fully verified on local hardware (audio playback via `afplay`, Unix domain socket IPC, `flock` singleton locking, Gemini extension linking, and Claude plugin execution).
+- **Linux (`amd64`)**: Cross-compilation verified. POSIX-compliant socket and locking primitives implemented; audio backend detection for `pw-play`, `paplay`, and `aplay`. Audio output is best-effort.
+- **Windows (`amd64` / `x64`)**: Architecture implemented and cross-compiled (named-pipe IPC with user SID DACL, `LockFileEx` singleton locking, hidden PowerShell `SoundPlayer`). Node launcher tests pass. Physical audible playback and manual Gemini CLI hook auto-installation on Windows remain pending verification on physical Windows hardware.

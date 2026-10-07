@@ -70,8 +70,11 @@ Implemented Commands:
                                          --scope <project|user>  Scope (default: project)
                                          --dry-run               Show exact proposed changes without writing
 
-  setup gemini|claude --dry-run        Inspect integrations, detect conflicts, and show proposed migration
-                                       Flags: --dry-run (required), --package-dir <path>, --project-dir <path>, --user-dir <path>
+  setup gemini|claude|deploy           Inspect integrations or deploy self-contained user packages
+                                       Subcommands:
+                                         gemini --dry-run        Inspect Gemini CLI integrations and conflicts
+                                         claude --dry-run        Inspect Claude Code integrations and conflicts
+                                         deploy [--dry-run]      Deploy self-contained packages to user location
 
 Planned Commands (Future Milestones):
   Claude Code Adapter                  Dedicated adapter for Claude Code hooks (planned for M5)
@@ -660,14 +663,73 @@ func runStatus(args []string) {
 
 func runSetup(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: agent-sfx setup gemini|claude --dry-run\n")
+		fmt.Fprintf(os.Stderr, "Usage: agent-sfx setup gemini|claude|deploy [--dry-run]\n")
 		os.Exit(1)
 	}
 
 	targetAgent := args[0]
-	if targetAgent != "gemini" && targetAgent != "claude" {
-		fmt.Fprintf(os.Stderr, "Unsupported agent %q for setup. Supported: gemini, claude\n", targetAgent)
+	if targetAgent != "gemini" && targetAgent != "claude" && targetAgent != "deploy" {
+		fmt.Fprintf(os.Stderr, "Unsupported subcommand %q for setup. Supported: gemini, claude, deploy\n", targetAgent)
 		os.Exit(1)
+	}
+
+	if targetAgent == "deploy" {
+		fs := flag.NewFlagSet("setup deploy", flag.ExitOnError)
+		dryRun := fs.Bool("dry-run", false, "Show proposed file deployments without copying files")
+		packageDir := fs.String("package-dir", "", "Path to source npm package directory (optional override)")
+		targetDir := fs.String("target-dir", "", "Path to destination user app directory (optional override)")
+		_ = fs.Parse(args[1:])
+
+		srcDir := *packageDir
+		if srcDir == "" {
+			if cwd, err := os.Getwd(); err == nil {
+				if fi, err := os.Stat(filepath.Join(cwd, "npm", "gemini-extension.json")); err == nil && !fi.IsDir() {
+					srcDir = filepath.Join(cwd, "npm")
+				}
+			}
+			if srcDir == "" {
+				if exe, err := os.Executable(); err == nil {
+					cand := filepath.Clean(filepath.Join(filepath.Dir(exe), "..", "npm"))
+					if fi, err := os.Stat(filepath.Join(cand, "gemini-extension.json")); err == nil && !fi.IsDir() {
+						srcDir = cand
+					}
+				}
+			}
+			if srcDir == "" {
+				srcDir = "npm"
+			}
+		}
+
+		report, err := setup.DeployPackages(srcDir, *targetDir, *dryRun)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Deployment failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		if *dryRun {
+			fmt.Printf("--- Dry-Run: Agent SFX User-Wide Package Deployment ---\n")
+			fmt.Printf("Source Package Dir  : %s\n", srcDir)
+			fmt.Printf("Target Base Dir     : %s\n", report.BaseDir)
+			fmt.Printf("Gemini Extension Dir: %s\n", report.GeminiExtensionDir)
+			fmt.Printf("Claude Plugin Dir   : %s\n", report.ClaudePluginDir)
+			fmt.Printf("Planned Files to Deploy (%d files):\n", len(report.DeployedFiles))
+			for _, f := range report.DeployedFiles {
+				fmt.Printf("  + %s\n", f)
+			}
+			fmt.Printf("\n[DRY-RUN] No files were deployed.\n")
+			return
+		}
+
+		fmt.Printf("[OK] Successfully deployed self-contained packages to %s\n", report.BaseDir)
+		fmt.Printf("  - Gemini Extension: %s\n", report.GeminiExtensionDir)
+		fmt.Printf("  - Claude Plugin   : %s\n", report.ClaudePluginDir)
+		fmt.Printf("\nNext Steps for One-Time User-Wide Activation:\n")
+		fmt.Printf("  1. Gemini CLI:\n")
+		fmt.Printf("       gemini extensions link %q\n", report.GeminiExtensionDir)
+		fmt.Printf("  2. Claude Code:\n")
+		fmt.Printf("       claude plugin marketplace add %q --scope user\n", report.ClaudePluginDir)
+		fmt.Printf("       claude plugin install agent-sfx@agent-sfx-local --scope user\n")
+		return
 	}
 
 	fs := flag.NewFlagSet("setup "+targetAgent, flag.ExitOnError)
