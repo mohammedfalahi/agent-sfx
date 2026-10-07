@@ -72,42 +72,78 @@ Adapter normalization, verified `StopFailure` enum filtering, neutral hook recei
 
 ## Installation
 
+Agent SFX is designed to be installed **once per user machine**. You do **not** need to clone Agent SFX into each project, run `npm install`, add git submodules, or commit any Agent SFX files into your project repositories.
+
 ### Prerequisites
 - **Go**: Version 1.22 or higher (to compile from source).
 - **Node.js**: Version 18.0.0 or higher (required for Node launchers and Claude Code plugin execution).
 - **Operating Systems**: macOS (Apple Silicon `darwin/arm64` or Intel `darwin/x64`), Windows 64-bit (`windows/amd64`), or Linux 64-bit (`linux/amd64`).
 
-### 1. Building from Source
+---
 
-```bash
-# Clone repository
-git clone https://github.com/mohammedfalahi/agent-sfx.git
-cd agent-sfx
-# PowerShell: Set-Location agent-sfx
+### Step 1: Building from Source
 
-# Build executable
-# macOS / Linux:
-go build -o bin/agent-sfx ./cmd/agent-sfx
+- **macOS / Linux**:
+  ```bash
+  git clone https://github.com/mohammedfalahi/agent-sfx.git
+  cd agent-sfx
+  go build -o bin/agent-sfx ./cmd/agent-sfx
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  git clone https://github.com/mohammedfalahi/agent-sfx.git
+  Set-Location agent-sfx
+  go build -o bin\agent-sfx.exe .\cmd\agent-sfx
+  ```
 
-# Windows (PowerShell):
-go build -o bin\agent-sfx.exe .\cmd\agent-sfx
-```
+---
 
-### 2. Recommended: One-Time User-Wide Setup
-Deploy complete, self-contained packages to your user application directory (`~/Library/Application Support/agent-sfx` on macOS, `%LOCALAPPDATA%\agent-sfx` on Windows) so Agent SFX operates across all terminal coding projects without adding files to any project workspace:
+### Step 2: Deploy Self-Contained Packages (User-Wide)
+Deploy self-contained extension and plugin packages to your permanent user application directory (`~/Library/Application Support/agent-sfx` on macOS, `%LOCALAPPDATA%\agent-sfx` on Windows). This completely decouples Agent SFX from your git clone so you can safely move or archive the repository:
 
-```bash
-# Deploy self-contained extension and plugin packages to user directory
-./bin/agent-sfx setup deploy
+- **macOS / Linux**:
+  ```bash
+  ./bin/agent-sfx setup deploy
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  .\bin\agent-sfx.exe setup deploy
+  ```
 
-# Activate Gemini CLI extension (user-wide)
-gemini extensions link "$HOME/Library/Application Support/agent-sfx/gemini-extension"
+---
 
-# Activate Claude Code plugin (user-wide)
-claude plugin marketplace add "$HOME/Library/Application Support/agent-sfx/claude-plugin" --scope user
-claude plugin install agent-sfx@agent-sfx-local --scope user
-```
-*(On Windows PowerShell, use `.\bin\agent-sfx.exe setup deploy` and reference `$env:LOCALAPPDATA\agent-sfx\...`)*.
+### Step 3: Activate User-Wide Integrations
+
+#### Gemini CLI
+Link the deployed user-wide extension into Gemini CLI:
+- **macOS / Linux**:
+  ```bash
+  gemini extensions link "$HOME/Library/Application Support/agent-sfx/gemini-extension"
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  gemini extensions link "$env:LOCALAPPDATA\agent-sfx\gemini-extension"
+  ```
+
+#### Claude Code
+Register the deployed plugin as a local marketplace in Claude Code:
+- **macOS / Linux**:
+  ```bash
+  claude plugin marketplace add "$HOME/Library/Application Support/agent-sfx/claude-plugin" --scope user
+  claude plugin install agent-sfx@agent-sfx-local --scope user
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  claude plugin marketplace add "$env:LOCALAPPDATA\agent-sfx\claude-plugin" --scope user
+  claude plugin install agent-sfx@agent-sfx-local --scope user
+  ```
+
+---
+
+### Step 4: Restart Your Agent
+Restart or open a new terminal session for Gemini CLI and Claude Code. The background audio worker will initialize silently on session start.
+
+---
 
 ### Project Overrides
 - **Gemini CLI**: If a workspace defines `.gemini/settings.json`, Gemini CLI merges project settings with user settings. Project-level hooks take precedence if conflicts exist.
@@ -157,14 +193,35 @@ echo '{"hook_event_name": "BeforeAgent", "session_id": "test", "timestamp": "202
 # Output is strictly "{}" with exit code 0
 ```
 
+### Uninstallation and Rollback
+
+To cleanly deactivate user-wide integrations:
+```bash
+# Deactivate Gemini CLI extension
+gemini extensions uninstall agent-sfx
+
+# Deactivate Claude Code plugin
+claude plugin uninstall agent-sfx@agent-sfx-local --scope user
+claude plugin marketplace remove agent-sfx-local --scope user
+
+# Stop background worker daemon
+agent-sfx worker stop
+```
+
 ---
 
 ## Configuration
 
-Settings are stored in a standard JSON configuration file:
-- **macOS**: `~/Library/Application Support/agent-sfx/config.json`
-- **Windows**: `%LOCALAPPDATA%\agent-sfx\config.json`
-- **Linux**: `~/.config/agent-sfx/config.json`
+### Permanent Storage Locations
+
+| Asset | macOS Path | Windows Path | Linux Path |
+| :--- | :--- | :--- | :--- |
+| **User Directory** | `~/Library/Application Support/agent-sfx` | `%LOCALAPPDATA%\agent-sfx` | `~/.config/agent-sfx` |
+| **Config File** | `.../agent-sfx/config.json` | `...\agent-sfx\config.json` | `.../agent-sfx/config.json` |
+| **Sounds Directory** | `.../agent-sfx/sounds/` | `...\agent-sfx\sounds\` | `.../agent-sfx/sounds/` |
+| **Gemini Extension** | `.../agent-sfx/gemini-extension/` | `...\agent-sfx\gemini-extension\` | `.../agent-sfx/gemini-extension/` |
+| **Claude Plugin** | `.../agent-sfx/claude-plugin/` | `...\agent-sfx\claude-plugin\` | `.../agent-sfx/claude-plugin/` |
+| **IPC Endpoint** | `.../agent-sfx/worker.sock` | `\\.\pipe\agent-sfx-<UserSID>` | `.../agent-sfx/worker.sock` |
 
 ### Default `config.json`
 ```json
@@ -174,6 +231,7 @@ Settings are stored in a standard JSON configuration file:
   "volume": 0.6,
   "cooldown_ms": 1200,
   "max_clip_ms": 15000,
+  "sounds_dir": "/path/to/agent-sfx/sounds",
   "events": {
     "permission_requested": true,
     "task_started": true,
@@ -191,13 +249,22 @@ Settings are stored in a standard JSON configuration file:
 - `volume` *(float, `0.0`–`1.0`)*: Applied directly to PCM WAV samples; never modifies operating system master volume.
 - `cooldown_ms` *(integer)*: Global quiet window (default `1200` ms) following playback to prevent rapid turn spam.
 - `max_clip_ms` *(integer)*: Clip duration ceiling (default and hard maximum `15000` ms / 15 seconds). Any clip exceeding this value is rejected without truncation.
+- `sounds_dir` *(string)*: Absolute path to the user's active sound directory. Preserved across updates.
 - `events` *(map)*: Granular per-event enablement flags.
 
-### Adding Custom Sounds
-1. Run `./bin/agent-sfx doctor` to view your active sounds directory.
-2. Place uncompressed 16-bit PCM `.wav` files into the corresponding event subfolder (e.g. `sounds/task_finished/`).
-3. If a folder contains multiple `.wav` files, Agent SFX selects one randomly without immediate repeat.
-4. Maximum file size is 25 MiB; maximum duration is 15 seconds.
+### Safely Adding Custom Sounds
+Custom WAV audio files (e.g. meme clips, brand audio, or custom chimes) placed in the permanent sounds directory become immediately audible across **all** your terminal projects:
+
+- **macOS / Linux**:
+  ```bash
+  cp my-sound.wav "$HOME/Library/Application Support/agent-sfx/sounds/task_finished/"
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  Copy-Item my-sound.wav "$env:LOCALAPPDATA\agent-sfx\sounds\task_finished\"
+  ```
+
+*Rules: Must be uncompressed 16-bit PCM `.wav` format, maximum 25 MiB file size, and maximum 15 seconds duration. If multiple sounds exist in a folder, Agent SFX selects randomly without immediate repeats.*
 
 ---
 
@@ -304,8 +371,13 @@ node npm/test_launcher.js
 | Operating System | Audio Backend | IPC Mechanism | Singleton Lock | Status |
 | :--- | :--- | :--- | :--- | :--- |
 | **macOS** (`arm64`, `x64`) | `/usr/bin/afplay` | Unix Domain Socket (`0600`) | `flock` | **Verified** on local hardware |
-| **Windows** (`amd64` / `x64`) | PowerShell `SoundPlayer` | Named Pipe (Current User SID DACL) | `LockFileEx` | **Cross-Compiled & Unit Tested** (audible playback pending physical host) |
-| **Linux** (`amd64`) | `pw-play` / `paplay` / `aplay` | Unix Domain Socket (`0600`) | `flock` | **Cross-Compiled** (audio playback is best-effort) |
+| **Windows** (`amd64` / `x64`) | PowerShell `SoundPlayer` | Named Pipe (Current User SID DACL) | `LockFileEx` | **Architecture Tested & Cross-Compiled** (Physical audio output pending physical Windows host) |
+| **Linux** (`amd64`) | `pw-play` / `paplay` / `aplay` | Unix Domain Socket (`0600`) | `flock` | **Cross-Compiled** (Audio output is best-effort depending on desktop audio daemon) |
+
+### Specific Platform Limitations:
+1. **Windows Gemini Manual Hook Auto-Installation**: `agent-sfx install gemini` is currently blocked on Windows (`ErrWindowsUnsupported`). Use the recommended Gemini extension link (`gemini extensions link`) instead.
+2. **Windows Physical Audio Playback**: While `agent-sfx.exe`, named-pipe IPC, and PowerShell `SoundPlayer` command generation pass automated unit suites, physical sound output and lock contention remain pending runtime testing on physical Windows hardware.
+3. **Claude Code Live Turn Verification**: Adapter normalization, plugin packaging, and universal launchers pass automated test suites; live hook triggering during an active authenticated turn is pending physical tester access.
 
 ---
 
