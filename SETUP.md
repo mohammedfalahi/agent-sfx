@@ -140,13 +140,35 @@ Register the deployed user-wide plugin as a local marketplace in Claude Code:
   claude plugin install agent-sfx@agent-sfx-local --scope user
   ```
 
-### Step 4: Restart Your Agent
+### Step 4: Install Safe User-Level CLI Shortcut (Enables Bare `agent-sfx` Command)
+By default, the deployed packages live in your user application directory. To run bare `agent-sfx` commands (such as `agent-sfx status`, `agent-sfx on`, `agent-sfx off`, `agent-sfx doctor`) directly from any terminal prompt or within Gemini CLI's subshell without `sudo` or admin privileges, create a user-level CLI shortcut to the permanent launcher:
+
+- **macOS / Linux**:
+  ```bash
+  # Ensure ~/.local/bin exists
+  mkdir -p ~/.local/bin
+
+  # Create safe user-level symlink pointing to the permanent launcher (no sudo required)
+  ln -sf "$HOME/Library/Application Support/agent-sfx/gemini-extension/bin/run.js" ~/.local/bin/agent-sfx
+
+  # Ensure ~/.local/bin is in your PATH (add to ~/.zshrc or ~/.bashrc if not already present)
+  export PATH="$HOME/.local/bin:$PATH"
+  ```
+
+- **Windows (PowerShell)**:
+  ```powershell
+  # Create user-level agent-sfx.cmd in WindowsApps (already in user PATH, no Admin required)
+  "@node `"$env:LOCALAPPDATA\agent-sfx\gemini-extension\bin\run.js`" %*" | Out-File -FilePath "$env:LOCALAPPDATA\Microsoft\WindowsApps\agent-sfx.cmd" -Encoding ascii
+  ```
+
+### Step 5: Restart Your Agent
 Restart or open a new terminal session for Gemini CLI and Claude Code. On startup, the agent's `SessionStart` hook silently initializes the background audio daemon, enabling sound effects across all projects.
 
-### Step 5: Verify Active Integration
-Verify that both agents recognize the integration:
-- Gemini CLI: Run `gemini extensions list` (should display `agent-sfx (0.1.0)` as linked and enabled).
-- Claude Code: Run `claude plugin list` (should display `agent-sfx@agent-sfx-local` under `Scope: user` as `✔ enabled`).
+### Step 6: Verify Active Integration
+Verify that both agents and the CLI shortcut are functioning:
+- **CLI Shortcut**: Run `which agent-sfx` (or `Get-Command agent-sfx` on Windows) followed by `agent-sfx doctor`.
+- **Gemini CLI**: Run `gemini extensions list` (should display `agent-sfx (0.1.0)` as linked and enabled).
+- **Claude Code**: Run `claude plugin list` (should display `agent-sfx@agent-sfx-local` under `Scope: user` as `✔ enabled`).
 
 ---
 
@@ -237,7 +259,9 @@ If you specifically require manual command hooks written directly into a project
 
 ## 7. Controls and Background Daemon Management
 
-The audio daemon runs in an isolated, singleton background process. You can control playback at any time without terminating the daemon:
+The audio daemon runs in an isolated, singleton background process. You can control playback at any time without terminating the daemon.
+
+> **Note**: Bare `agent-sfx` commands require installing the user-level CLI shortcut (Step 4 above). If the shortcut has not been created yet, invoke commands using the permanent launcher (`"$HOME/Library/Application Support/agent-sfx/gemini-extension/bin/run.js"` on macOS/Linux or `& "$env:LOCALAPPDATA\agent-sfx\gemini-extension\bin\run.js"` on Windows) or `./bin/agent-sfx` from your clone.
 
 ### Audio Toggle Commands
 ```bash

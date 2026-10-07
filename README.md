@@ -140,7 +140,29 @@ Register the deployed plugin as a local marketplace in Claude Code:
 
 ---
 
-### Step 4: Restart Your Agent
+### Step 4: Install Safe User-Level CLI Shortcut (Enables Bare `agent-sfx` Command)
+By default, the deployed packages live in your user application directory. To run bare `agent-sfx` commands (e.g. `agent-sfx on`, `agent-sfx off`, `agent-sfx status`, `agent-sfx doctor`) directly from any terminal prompt or within Gemini's subshell without `sudo` or admin privileges, create a user-level CLI shortcut to the permanent launcher:
+
+- **macOS / Linux**:
+  ```bash
+  # Ensure ~/.local/bin exists
+  mkdir -p ~/.local/bin
+
+  # Create safe user-level symlink pointing to permanent launcher (no sudo required)
+  ln -sf "$HOME/Library/Application Support/agent-sfx/gemini-extension/bin/run.js" ~/.local/bin/agent-sfx
+
+  # Ensure ~/.local/bin is in your PATH (add to ~/.zshrc or ~/.bashrc if not already present)
+  export PATH="$HOME/.local/bin:$PATH"
+  ```
+- **Windows (PowerShell)**:
+  ```powershell
+  # Create user-level agent-sfx.cmd in WindowsApps (already in user PATH, no Admin required)
+  "@node `"$env:LOCALAPPDATA\agent-sfx\gemini-extension\bin\run.js`" %*" | Out-File -FilePath "$env:LOCALAPPDATA\Microsoft\WindowsApps\agent-sfx.cmd" -Encoding ascii
+  ```
+
+---
+
+### Step 5: Restart Your Agent
 Restart or open a new terminal session for Gemini CLI and Claude Code. The background audio worker will initialize silently on session start.
 
 ---
@@ -152,6 +174,8 @@ Restart or open a new terminal session for Gemini CLI and Claude Code. The backg
 ---
 
 ## Usage
+
+> **Note**: Bare `agent-sfx` commands require installing the user-level CLI shortcut (Step 4 above). If the shortcut has not been installed yet, invoke commands using the permanent launcher (`"$HOME/Library/Application Support/agent-sfx/gemini-extension/bin/run.js"` on macOS/Linux or `& "$env:LOCALAPPDATA\agent-sfx\gemini-extension\bin\run.js"` on Windows) or `./bin/agent-sfx` from your clone.
 
 ### Command Summary
 
