@@ -3,6 +3,14 @@
   "version": "0.1.0",
   "description": "Local sound accessory for terminal coding agents",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mohammedfalahi/AgentSFX.git"
+  },
+  "homepage": "https://github.com/mohammedfalahi/AgentSFX#readme",
+  "bugs": {
+    "url": "https://github.com/mohammedfalahi/AgentSFX/issues"
+  },
   "bin": {
     "agent-sfx": "bin/run.js"
   },

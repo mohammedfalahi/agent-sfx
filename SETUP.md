@@ -21,8 +21,8 @@ Agent SFX is a local, open-source sound-only accessory for terminal coding agent
 ### macOS / Linux
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/agent-sfx.git
-cd agent-sfx
+git clone https://github.com/mohammedfalahi/AgentSFX.git
+cd AgentSFX
 
 # Build the executable into bin/
 go build -o bin/agent-sfx ./cmd/agent-sfx
@@ -34,8 +34,8 @@ go build -o bin/agent-sfx ./cmd/agent-sfx
 ### Windows (PowerShell)
 ```powershell
 # Clone the repository
-git clone https://github.com/your-username/agent-sfx.git
-Set-Location agent-sfx
+git clone https://github.com/mohammedfalahi/AgentSFX.git
+Set-Location AgentSFX
 
 # Build the executable into bin\
 go build -o bin\agent-sfx.exe .\cmd\agent-sfx

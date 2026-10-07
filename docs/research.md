@@ -143,7 +143,7 @@ When an authorized tester with active Claude Code subscription/authenticated acc
 ### 1. State Snapshot (Pre-Installation)
 Create a unique timestamped snapshot directory and record initial file existence. Do not suppress errors:
 ```bash
-SNAPSHOT_DIR="$HOME/.gemini/tmp/funcode/snapshots/claude-preinstall-$(date +%Y%m%d-%H%M%S)"
+SNAPSHOT_DIR="$HOME/.gemini/tmp/AgentSFX/snapshots/claude-preinstall-$(date +%Y%m%d-%H%M%S)"
 mkdir -p "$SNAPSHOT_DIR"
 
 # Record manifest of original state

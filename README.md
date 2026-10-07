@@ -81,8 +81,9 @@ Adapter normalization, verified `StopFailure` enum filtering, neutral hook recei
 
 ```bash
 # Clone repository
-git clone https://github.com/mohammedfalahi/funcode.git agent-sfx
-cd agent-sfx
+git clone https://github.com/mohammedfalahi/AgentSFX.git
+cd AgentSFX
+# PowerShell: Set-Location AgentSFX
 
 # Build executable
 # macOS / Linux:
