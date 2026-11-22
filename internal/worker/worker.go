@@ -19,10 +19,13 @@ import (
 type Daemon struct {
 	cfg       config.Config
 	soundsDir string
-	clock     scheduler.Clock
-	player    audio.Player
-	cache     *audio.Cache
-	selector  *sounds.Selector
+	// FallbackSoundsDir is consulted for events with no WAVs in soundsDir.
+	// Optional; set before Run.
+	FallbackSoundsDir string
+	clock             scheduler.Clock
+	player            audio.Player
+	cache             *audio.Cache
+	selector          *sounds.Selector
 
 	server    *ipc.Server
 	sched     *scheduler.Scheduler
@@ -94,6 +97,9 @@ func (d *Daemon) Run(socketPath string) error {
 
 	// 2. Start scheduler
 	d.sched = scheduler.New(d.cfg, d.clock, d.player, d.cache, d.selector, d.soundsDir)
+	if d.FallbackSoundsDir != "" && d.FallbackSoundsDir != d.soundsDir {
+		d.sched.SetFallbackSoundsDir(d.FallbackSoundsDir)
+	}
 	d.sched.Start()
 	defer d.sched.Stop()
 
@@ -141,12 +147,15 @@ func (d *Daemon) handleIPC(req ipc.Request) ipc.Response {
 
 	case ipc.TypeStatus:
 		uptime := int64(d.clock.Now().Sub(d.startTime).Seconds())
+		primary, fallback := d.sched.SoundsDirs()
 		return ipc.Response{
-			OK:      true,
-			PID:     os.Getpid(),
-			Uptime:  uptime,
-			Playing: d.sched.IsPlaying(),
-			Enabled: d.sched.IsEnabled(),
+			OK:                true,
+			PID:               os.Getpid(),
+			Uptime:            uptime,
+			Playing:           d.sched.IsPlaying(),
+			Enabled:           d.sched.IsEnabled(),
+			SoundsDir:         primary,
+			FallbackSoundsDir: fallback,
 		}
 
 	case ipc.TypeEnable:

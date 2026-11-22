@@ -10,7 +10,6 @@ import (
 
 	"agent-sfx/internal/events"
 	"agent-sfx/internal/ipc"
-	"agent-sfx/internal/preview"
 	"agent-sfx/internal/worker"
 )
 
@@ -41,6 +40,10 @@ type Receiver struct {
 	SoundsDir  string
 	ConfigPath string
 	TestMode   bool // Allows injecting synthetic normalized events for testing
+	// IPCTimeout overrides HookIPCTimeout when non-zero. Production hooks leave it
+	// unset; tests that verify delivery (not timing) raise it to avoid flakiness
+	// under heavy parallel load.
+	IPCTimeout time.Duration
 }
 
 // ReadBoundedStdin reads up to MaxHookStdinBytes within HookReadTimeout.
@@ -148,15 +151,15 @@ func (rcv *Receiver) ProcessHook(ctx context.Context, stdin io.Reader, stdout io
 	var base GeminiBaseEnvelope
 	if err := json.Unmarshal(payload, &base); err == nil && base.HookEventName == "SessionStart" {
 		traceClassification = "session_start"
-		// Resolve absolute sounds directory explicitly so worker does not depend on Gemini's cwd
-		resolvedSounds := rcv.SoundsDir
-		if resolvedSounds == "" {
-			resolvedSounds = preview.ResolveSoundsDir("", "")
+		// Only an explicit SoundsDir is forwarded. When empty, the worker resolves
+		// the directory from config (sounds_dir) so user sounds are never overridden
+		// by bundled starter sounds.
+		// Without a resolvable socket path, do not spawn: the worker would bind a
+		// different default endpoint that this hook can never reach.
+		if rcv.SocketPath != "" {
+			// SpawnDetachedWorker returns immediately without polling or waiting for readiness.
+			_ = worker.SpawnDetachedWorker(rcv.BinaryPath, rcv.SocketPath, rcv.ConfigPath, rcv.SoundsDir)
 		}
-
-		// Launch detached child process before exiting hook process.
-		// SpawnDetachedWorker returns immediately without polling or waiting for readiness.
-		_ = worker.SpawnDetachedWorker(rcv.BinaryPath, rcv.SocketPath, rcv.ConfigPath, resolvedSounds)
 		res.Dropped = true
 		res.DropReason = "SessionStart triggered silent worker startup"
 		return res, nil
@@ -190,7 +193,11 @@ func (rcv *Receiver) ProcessHook(ctx context.Context, stdin io.Reader, stdout io
 
 	// 3. Dispatch to worker over IPC with 25ms deadline (no retries)
 	ipcStart := time.Now()
-	ipcCtx, cancel := context.WithTimeout(ctx, HookIPCTimeout)
+	ipcTimeout := HookIPCTimeout
+	if rcv.IPCTimeout > 0 {
+		ipcTimeout = rcv.IPCTimeout
+	}
+	ipcCtx, cancel := context.WithTimeout(ctx, ipcTimeout)
 	defer cancel()
 
 	_, err = ipc.Send(ipcCtx, rcv.SocketPath, ipc.Request{

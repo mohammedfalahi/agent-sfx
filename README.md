@@ -55,17 +55,17 @@ Verified native hook integration. Agent SFX installs owned hooks into `.gemini/s
 | `AfterTool` | Direct `go test` or `pytest` with passed summary | `tests_passed` | Synchronous runner exit with positive summary; rejects compound commands |
 | `SessionStart` | Startup / resume / clear | *(none)* | Silently launches background worker if offline without blocking agent |
 
-### 2. Claude Code (v2.1.162)
-Adapter normalization, verified `StopFailure` enum filtering, neutral hook receiver (`agent-sfx hook claude`), and self-contained plugin packaging (`npm/claude/`) implemented with automated test suites passing. Live event detection in an authenticated session is pending physical tester access.
+### 2. Claude Code (macOS; formats checked against the 2.1.306 docs)
+The Claude Code plugin lives in [`npm/claude/`](npm/claude/README.md). It is implemented and covered by automated tests, including an end-to-end run of the real hook commands against recorded payloads. It has **not yet been verified in a live Claude Code session**. The plugin needs no Node.js: hooks run a small shell launcher, and hook stdout is always empty, which Claude Code documents as a no-op.
 
 | Claude Hook Event | Payload Match Condition | SFX Event | Verification & Semantics |
 | :--- | :--- | :--- | :--- |
 | `UserPromptSubmit` | Any valid prompt turn | `task_started` | Direct prompt submission |
-| `Stop` | `stop_hook_active == false` | `task_finished` | Turn completion only |
+| `Stop` | Any turn end (does not fire on user interrupt or API error) | `task_finished` | Turn completion only; `stop_hook_active` is not checked, so another plugin's blocking Stop hook can cause a second finish sound (5 s dedupe usually drops it) |
 | `PermissionRequest` | `tool_name != "AskUserQuestion"` | `permission_requested` | Suppressed when presenting `AskUserQuestion` to avoid duplicate audio |
 | `PreToolUse` | `tool_name == "AskUserQuestion"` (valid schema) | `waiting_for_user` | Validates question schema; all other tool calls return zero events |
 | `PostToolUseFailure` | Non-empty `error` and `is_interrupt == false` | `error` | Tool failure; user cancellations (`is_interrupt == true`) produce no sound |
-| `StopFailure` | Exact match against verified 10-value enum | `error` | Verified against Claude Code schema (`rate_limit`, `billing_error`, etc.) |
+| `StopFailure` | `error` is one of the documented values (`rate_limit`, `billing_error`, `authentication_failed`, `server_error`, …) | `error` | Billing and rate-limit errors stay a general `error` on purpose; none is treated as `usage_exhausted` |
 | `SessionStart` | Any valid session start | *(none)* | Silently launches background worker if offline without blocking agent |
 
 ---
@@ -76,7 +76,7 @@ Agent SFX is designed to be installed **once per user machine**. You do **not** 
 
 ### Prerequisites
 - **Go**: Version 1.22 or higher (to compile from source).
-- **Node.js**: Version 18.0.0 or higher (required for Node launchers and Claude Code plugin execution).
+- **Node.js**: Version 18.0.0 or higher (required by the Gemini extension and npm launcher; the Claude Code plugin does not need Node).
 - **Operating Systems**: macOS (Apple Silicon `darwin/arm64` or Intel `darwin/x64`), Windows 64-bit (`windows/amd64`), or Linux 64-bit (`linux/amd64`).
 
 ---
@@ -126,7 +126,15 @@ Link the deployed user-wide extension into Gemini CLI:
   ```
 
 #### Claude Code
-Register the deployed plugin as a local marketplace in Claude Code:
+Recommended (macOS): build the plugin in place and try it for one session without installing anything. See [`npm/claude/README.md`](npm/claude/README.md):
+```bash
+scripts/build-claude-plugin.sh
+claude --plugin-dir npm/claude
+```
+
+> **Caution:** `setup deploy` rewrites **both** the deployed Gemini extension and the Claude plugin folders. If Gemini CLI is linked to the deployed extension, redeploying also replaces Gemini's files.
+
+To install from the deployed copy instead:
 - **macOS / Linux**:
   ```bash
   claude plugin marketplace add "$HOME/Library/Application Support/agent-sfx/claude-plugin" --scope user
@@ -290,6 +298,8 @@ Custom WAV audio files (e.g. meme clips, brand audio, or custom chimes) placed i
 
 *Rules: Must be uncompressed 16-bit PCM `.wav` format, maximum 25 MiB file size, and maximum 15 seconds duration. If multiple sounds exist in a folder, Agent SFX selects randomly without immediate repeats.*
 
+*Your sounds always take priority over the bundled starter sounds. An event with no WAV files in your folder falls back to the bundled sound, so you can customize just one event. `agent-sfx status` shows which folders the worker is using.*
+
 ---
 
 ## Architecture
@@ -401,7 +411,7 @@ node npm/test_launcher.js
 ### Specific Platform Limitations:
 1. **Windows Gemini Manual Hook Auto-Installation**: `agent-sfx install gemini` is currently blocked on Windows (`ErrWindowsUnsupported`). Use the recommended Gemini extension link (`gemini extensions link`) instead.
 2. **Windows Physical Audio Playback**: While `agent-sfx.exe`, named-pipe IPC, and PowerShell `SoundPlayer` command generation pass automated unit suites, physical sound output and lock contention remain pending runtime testing on physical Windows hardware.
-3. **Claude Code Live Turn Verification**: Adapter normalization, plugin packaging, and universal launchers pass automated test suites; live hook triggering during an active authenticated turn is pending physical tester access.
+3. **Claude Code Live Verification**: The plugin hooks, launcher, and skill pass automated tests, including an end-to-end run of the real `hooks.json` commands. Hooks firing in a live Claude Code session, audible playback, and the `/agent-sfx:sfx` skill are not yet verified. The Claude plugin targets macOS only.
 
 ---
 

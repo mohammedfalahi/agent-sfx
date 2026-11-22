@@ -7,7 +7,7 @@
           {
             "name": "agent-sfx-session-start",
             "type": "command",
-            "command": "\"${extensionPath}/bin/run.js\" worker start"
+            "command": "\"${extensionPath}/bin/run.js\" hook gemini"
           }
         ]
       }

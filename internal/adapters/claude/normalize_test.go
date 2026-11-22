@@ -396,6 +396,9 @@ func TestNormalize_StopFailure_VerifiedClassificationStrings(t *testing.T) {
 		"server_error",
 		"unknown",
 		"max_output_tokens",
+		// Added in current Claude Code docs (checked against 2.1.306)
+		"account_on_hold",
+		"cloud_credential_error",
 	}
 
 	for _, errStr := range verified {

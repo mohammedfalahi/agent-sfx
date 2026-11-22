@@ -76,6 +76,8 @@ func TestIntegration_HookToWorkerWithFakePlayer(t *testing.T) {
 	rcv := &gemini.Receiver{
 		SocketPath: sockPath,
 		TestMode:   false, // Production mode with real fixtures
+		// Delivery, not the 25 ms production deadline, is under test here.
+		IPCTimeout: 2 * time.Second,
 	}
 
 	fixtures := []struct {
@@ -109,9 +111,14 @@ func TestIntegration_HookToWorkerWithFakePlayer(t *testing.T) {
 				if !res.SentEvent {
 					t.Fatalf("expected SentEvent to be true, got drop reason: %s", res.DropReason)
 				}
-				// Allow worker scheduling (100ms coalesce window + playback)
-				time.Sleep(150 * time.Millisecond)
-				callsAfter := len(fakePlayer.Calls())
+				// Allow worker scheduling (100ms coalesce window + playback); poll so
+				// the check does not depend on scheduler latency under load.
+				callsAfter := callsBefore
+				for deadline := time.Now().Add(2 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+					if callsAfter = len(fakePlayer.Calls()); callsAfter > callsBefore {
+						break
+					}
+				}
 				if callsAfter <= callsBefore {
 					t.Fatalf("expected sound played for %s", tc.file)
 				}

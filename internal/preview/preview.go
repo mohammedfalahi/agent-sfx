@@ -37,14 +37,40 @@ type Runner struct {
 	Cache     *audio.Cache
 	Selector  *sounds.Selector
 	SoundsDir string
+	// FallbackSoundsDir is consulted only for events that have no WAV files in
+	// SoundsDir (typically the bundled starter sounds). Optional.
+	FallbackSoundsDir string
 }
 
-// ResolveSoundsDir finds the active sounds directory checking:
+// BundledSoundsEnv names the environment variable through which an agent
+// launcher (plugin or extension) advertises the starter sounds it ships with.
+const BundledSoundsEnv = "AGENT_SFX_BUNDLED_SOUNDS_DIR"
+
+// BundledSoundsDir returns the launcher-advertised bundled sounds directory,
+// or "" when none is set or it does not exist.
+func BundledSoundsDir() string {
+	dir := os.Getenv(BundledSoundsEnv)
+	if dir == "" {
+		return ""
+	}
+	if fi, err := os.Stat(dir); err != nil || !fi.IsDir() {
+		return ""
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		return abs
+	}
+	return dir
+}
+
+// ResolveSoundsDir finds the active (primary) sounds directory checking:
 // 1. Explicit CLI override
 // 2. Config file sounds_dir
-// 3. User config directory (~/.config/agent-sfx/sounds or OS equivalent)
-// 4. Executable adjacent sounds directory
-// 5. Working directory ./sounds fallback
+// 3. User config directory (~/Library/Application Support/agent-sfx/sounds or OS equivalent)
+// 4. Launcher-bundled sounds (AGENT_SFX_BUNDLED_SOUNDS_DIR)
+// 5. Executable adjacent sounds directory
+// 6. Working directory ./sounds fallback
+// User-owned locations always win over bundled starter sounds, so a plugin or
+// extension update can never hide a user's custom sounds.
 // Returns a fully resolved absolute path.
 func ResolveSoundsDir(cliDir, cfgDir string) string {
 	candidates := []string{}
@@ -54,16 +80,18 @@ func ResolveSoundsDir(cliDir, cfgDir string) string {
 	if cfgDir != "" {
 		candidates = append(candidates, cfgDir)
 	}
-	if envDir := os.Getenv("AGENT_SFX_BUNDLED_SOUNDS_DIR"); envDir != "" {
-		candidates = append(candidates, envDir)
-	}
 
-	// 1. User config directory
+	// User config directory
 	if userDir, err := os.UserConfigDir(); err == nil {
 		candidates = append(candidates, filepath.Join(userDir, "agent-sfx", "sounds"))
 	}
 
-	// 2. Executable adjacent sounds directory (direct or package root)
+	// Launcher-bundled starter sounds
+	if envDir := os.Getenv(BundledSoundsEnv); envDir != "" {
+		candidates = append(candidates, envDir)
+	}
+
+	// Executable adjacent sounds directory (direct or package root)
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
 		candidates = append(candidates,
@@ -114,7 +142,7 @@ func (r *Runner) Preview(ctx context.Context, kind events.EventKind) (*Result, e
 		}, ErrPlayerOffline
 	}
 
-	chosenSound, err := r.Selector.SelectSound(r.SoundsDir, kind)
+	chosenSound, err := r.Selector.SelectSoundFromDirs(kind, r.SoundsDir, r.FallbackSoundsDir)
 	if err != nil {
 		return nil, fmt.Errorf("sound selection failed for %s: %w", kind, err)
 	}

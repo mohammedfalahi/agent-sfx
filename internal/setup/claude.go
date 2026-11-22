@@ -366,7 +366,7 @@ func PlanClaudeSetup(workspaceDir, userHomeDir, customPackageDir string, runner 
 	}
 
 	// Verify self-contained launcher exists
-	launcherPath := filepath.Join(claudePluginDir, "bin", "run.js")
+	launcherPath := filepath.Join(claudePluginDir, "runtime", "agent-sfx")
 	if _, err := os.Stat(launcherPath); err != nil {
 		plan.MigrationAbort = true
 		plan.AbortReason = fmt.Sprintf("claude plugin self-contained launcher not found at %s", launcherPath)

@@ -76,8 +76,6 @@ Implemented Commands:
                                          claude --dry-run        Inspect Claude Code integrations and conflicts
                                          deploy [--dry-run]      Deploy self-contained packages to user location
 
-Planned Commands (Future Milestones):
-  Claude Code Adapter                  Dedicated adapter for Claude Code hooks (planned for M5)
 `, doctor.AppVersion)
 }
 
@@ -172,6 +170,8 @@ func runPreview(args []string) {
 		Cache:     cache,
 		Selector:  sounds.NewSelector(nil),
 		SoundsDir: resolvedSounds,
+		// Events the user has not customized fall back to bundled starter sounds.
+		FallbackSoundsDir: preview.BundledSoundsDir(),
 	}
 
 	result, err := runner.Preview(context.Background(), eventKind)
@@ -243,8 +243,9 @@ func runWorker(args []string) {
 		soundsDir := fs.String("sounds-dir", "", "Path to custom sounds directory")
 		_ = fs.Parse(subArgs)
 
-		resolvedSounds := preview.ResolveSoundsDir(*soundsDir, "")
-		resp, newlyStarted, err := worker.StartDaemon("", socketPath, *configPath, resolvedSounds)
+		// Pass only an explicit --sounds-dir through. Otherwise the worker resolves
+		// the directory itself from config (sounds_dir) so user sounds are honored.
+		resp, newlyStarted, err := worker.StartDaemon("", socketPath, *configPath, *soundsDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[ERROR] Failed to start worker daemon: %v\n", err)
 			os.Exit(1)
@@ -300,6 +301,7 @@ func runWorker(args []string) {
 			fmt.Fprintf(os.Stderr, "Worker init error: %v\n", err)
 			os.Exit(1)
 		}
+		daemon.FallbackSoundsDir = preview.BundledSoundsDir()
 
 		if err := daemon.Run(socketPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Worker runtime error: %v\n", err)
@@ -321,7 +323,10 @@ func runHook(args []string) {
 	adapter := args[0]
 	socketPath, _ := ipc.ResolveSocketPath()
 	exePath, _ := os.Executable()
-	resolvedSounds := preview.ResolveSoundsDir("", "")
+	// Do not resolve a sounds directory here: the hook has not loaded config, and
+	// forcing one onto the worker command line would override the user's
+	// configured sounds_dir. The worker resolves it from config at startup.
+	resolvedSounds := ""
 
 	switch adapter {
 	case "gemini":
@@ -583,6 +588,8 @@ type statusReport struct {
 		Enabled   bool   `json:"enabled"`
 		Playing   bool   `json:"playing"`
 		Socket    string `json:"socket,omitempty"`
+		SoundsDir string `json:"sounds_dir,omitempty"`
+		Fallback  string `json:"fallback_sounds_dir,omitempty"`
 	} `json:"worker"`
 }
 
@@ -619,6 +626,8 @@ func runStatus(args []string) {
 			report.Worker.UptimeSec = resp.Uptime
 			report.Worker.Enabled = resp.Enabled
 			report.Worker.Playing = resp.Playing
+			report.Worker.SoundsDir = resp.SoundsDir
+			report.Worker.Fallback = resp.FallbackSoundsDir
 		}
 	}
 
@@ -656,6 +665,12 @@ func runStatus(args []string) {
 		fmt.Printf("Worker Daemon    : running [PID: %d, uptime: %ds, socket: %s]\n",
 			report.Worker.PID, report.Worker.UptimeSec, report.Worker.Socket)
 		fmt.Printf("Worker State     : live audio %s (%s)\n", audioState, playingStr)
+		if report.Worker.SoundsDir != "" {
+			fmt.Printf("Worker Sounds    : %s\n", report.Worker.SoundsDir)
+		}
+		if report.Worker.Fallback != "" {
+			fmt.Printf("Fallback Sounds  : %s\n", report.Worker.Fallback)
+		}
 	} else {
 		fmt.Printf("Worker Daemon    : not running (socket: %s)\n", report.Worker.Socket)
 	}

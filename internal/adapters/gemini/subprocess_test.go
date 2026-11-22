@@ -3,6 +3,7 @@
 package gemini_test
 
 import (
+	"agent-sfx/internal/testutil"
 	"bytes"
 	"fmt"
 	"os"
@@ -15,19 +16,8 @@ import (
 )
 
 func TestSubprocess_SessionStartLaunchesDetachedWorker(t *testing.T) {
-	// 1. Locate compiled binary
-	binPath, err := filepath.Abs(filepath.Join("..", "..", "..", "bin", "agent-sfx"))
-	if err != nil {
-		t.Fatalf("failed to resolve binary path: %v", err)
-	}
-
-	if _, err := os.Stat(binPath); err != nil {
-		// Compile binary if missing
-		cmd := exec.Command("go", "build", "-o", binPath, "../../../cmd/agent-sfx")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("failed to compile binary: %v, output: %s", err, string(out))
-		}
-	}
+	// 1. Build a fresh binary from current sources
+	binPath := testutil.BuildAgentSFX(t)
 
 	// 2. Setup isolated temporary directory for test socket
 	tmpDir := filepath.Join("/tmp", fmt.Sprintf("asfx-subproc-test-%d", os.Getuid()))

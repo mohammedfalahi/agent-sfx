@@ -46,6 +46,11 @@ type Response struct {
 	Uptime  int64  `json:"uptime_sec,omitempty"`
 	Playing bool   `json:"playing,omitempty"`
 	Enabled bool   `json:"enabled,omitempty"`
+	// SoundsDir and FallbackSoundsDir report the worker's active sound
+	// locations in status responses (diagnostics only; may be empty from
+	// workers built before this field existed).
+	SoundsDir         string `json:"sounds_dir,omitempty"`
+	FallbackSoundsDir string `json:"fallback_sounds_dir,omitempty"`
 }
 
 // Validate checks request invariants.

@@ -16,7 +16,7 @@ func createTestClaudePackage(t *testing.T, baseDir string) string {
 	t.Helper()
 	claudeDir := filepath.Join(baseDir, "claude")
 	claudePluginDir := filepath.Join(claudeDir, ".claude-plugin")
-	binDir := filepath.Join(claudeDir, "bin")
+	binDir := filepath.Join(claudeDir, "runtime")
 
 	if err := os.MkdirAll(claudePluginDir, 0755); err != nil {
 		t.Fatalf("failed to create plugin dir: %v", err)
@@ -55,7 +55,7 @@ func createTestClaudePackage(t *testing.T, baseDir string) string {
 		t.Fatalf("failed to write marketplace.json: %v", err)
 	}
 
-	if err := os.WriteFile(filepath.Join(binDir, "run.js"), []byte("#!/usr/bin/env node\n"), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(binDir, "agent-sfx"), []byte("#!/bin/sh\n"), 0755); err != nil {
 		t.Fatalf("failed to write run.js: %v", err)
 	}
 

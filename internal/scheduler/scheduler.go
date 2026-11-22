@@ -31,6 +31,8 @@ type Scheduler struct {
 	cache     *audio.Cache
 	selector  *sounds.Selector
 	soundsDir string
+	// fallbackSoundsDir is used only for events with no WAVs in soundsDir.
+	fallbackSoundsDir string
 
 	playing       bool
 	cooldownUntil time.Time
@@ -70,6 +72,22 @@ func New(
 		quit:        make(chan struct{}),
 		done:        make(chan struct{}),
 	}
+}
+
+// SetFallbackSoundsDir configures a secondary sounds directory (typically the
+// bundled starter sounds) used for events that have no WAVs in the primary
+// directory. Must be called before Start.
+func (s *Scheduler) SetFallbackSoundsDir(dir string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fallbackSoundsDir = dir
+}
+
+// SoundsDirs returns the primary and fallback sounds directories.
+func (s *Scheduler) SoundsDirs() (primary, fallback string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.soundsDir, s.fallbackSoundsDir
 }
 
 // Start launches the background scheduler event loop.
@@ -268,7 +286,11 @@ func (s *Scheduler) triggerPending() {
 }
 
 func (s *Scheduler) playEvent(ev events.Event) {
-	chosenSound, err := s.selector.SelectSound(s.soundsDir, ev.Kind)
+	s.mu.Lock()
+	primary, fallback := s.soundsDir, s.fallbackSoundsDir
+	s.mu.Unlock()
+
+	chosenSound, err := s.selector.SelectSoundFromDirs(ev.Kind, primary, fallback)
 	if err != nil {
 		return
 	}

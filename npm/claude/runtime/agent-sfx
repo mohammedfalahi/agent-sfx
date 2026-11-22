@@ -1,0 +1,47 @@
+#!/bin/sh
+# Agent SFX launcher for the Claude Code plugin (macOS).
+#
+# Picks the prebuilt binary for this Mac (runtime/darwin-arm64 or
+# runtime/darwin-x64), advertises the plugin's bundled starter sounds, and execs
+# the binary with the original arguments. Written in plain POSIX sh so hooks do
+# not pay Node.js startup time on every Claude Code event.
+# Kept to a single helper process (uname) because hooks run on every event.
+case "$0" in
+  */*) dir=${0%/*} ;;
+  *) dir=. ;;
+esac
+
+case "$(uname -sm)" in
+  "Darwin arm64") arch=darwin-arm64 ;;
+  "Darwin x86_64") arch=darwin-x64 ;;
+  *)
+    echo "Agent SFX: this Claude Code plugin currently supports macOS only (arm64, x86_64)." >&2
+    exit 1
+    ;;
+esac
+
+bin="$dir/$arch/agent-sfx"
+if [ ! -x "$bin" ]; then
+  # Slow path: the launcher was reached through a symlink or a relative path.
+  dir=$(CDPATH= cd -P -- "$dir" 2>/dev/null && pwd -P) || dir=.
+  if [ -L "$0" ]; then
+    target=$(readlink "$0")
+    case "$target" in
+      /*) dir=${target%/*} ;;
+      */*) dir="$dir/${target%/*}" ;;
+    esac
+  fi
+  bin="$dir/$arch/agent-sfx"
+fi
+if [ ! -x "$bin" ]; then
+  echo "Agent SFX: prebuilt binary not found at $bin (run scripts/build-claude-plugin.sh)" >&2
+  exit 1
+fi
+
+# Bundled sounds are a per-event fallback; the user's configured sounds win.
+if [ -z "${AGENT_SFX_BUNDLED_SOUNDS_DIR:-}" ]; then
+  AGENT_SFX_BUNDLED_SOUNDS_DIR="${dir%/*}/sounds"
+  export AGENT_SFX_BUNDLED_SOUNDS_DIR
+fi
+
+exec "$bin" "$@"

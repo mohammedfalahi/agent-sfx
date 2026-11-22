@@ -121,6 +121,35 @@ func (s *Selector) SelectSound(baseDir string, kind events.EventKind) (string, e
 	return chosen, nil
 }
 
+// SelectSoundFromDirs selects from the first directory (in order) that contains
+// at least one WAV for the event. Empty and duplicate directory entries are
+// skipped. This lets a user's sounds directory override bundled starter sounds
+// per event, while events the user has not customized still fall back.
+func (s *Selector) SelectSoundFromDirs(kind events.EventKind, dirs ...string) (string, error) {
+	seen := make(map[string]bool, len(dirs))
+	var firstErr error
+	for _, dir := range dirs {
+		if dir == "" || seen[dir] {
+			continue
+		}
+		seen[dir] = true
+		wavs, err := ListEventSounds(dir, kind)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if len(wavs) > 0 {
+			return s.SelectSound(dir, kind)
+		}
+	}
+	if firstErr != nil {
+		return "", firstErr
+	}
+	return "", ErrNoSounds
+}
+
 // LastPlayed returns the last selected file for an event kind.
 func (s *Selector) LastPlayed(kind events.EventKind) string {
 	s.mu.Lock()

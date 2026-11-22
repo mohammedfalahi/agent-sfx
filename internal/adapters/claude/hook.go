@@ -11,7 +11,6 @@ import (
 	"agent-sfx/internal/config"
 	"agent-sfx/internal/events"
 	"agent-sfx/internal/ipc"
-	"agent-sfx/internal/preview"
 	"agent-sfx/internal/worker"
 )
 
@@ -42,6 +41,10 @@ type Receiver struct {
 	SoundsDir  string
 	ConfigPath string
 	TestMode   bool
+	// IPCTimeout overrides HookIPCTimeout when non-zero. Production hooks leave it
+	// unset; tests that verify delivery (not timing) raise it to avoid flakiness
+	// under heavy parallel load.
+	IPCTimeout time.Duration
 }
 
 // ReadBoundedStdin reads up to MaxHookStdinBytes within HookReadTimeout.
@@ -74,10 +77,13 @@ func ReadBoundedStdin(ctx context.Context, r io.Reader) ([]byte, error) {
 }
 
 // ProcessHook processes an incoming Claude Code hook invocation:
-// 1. Defensively reads stdin with size and time bounds.
-// 2. Emits exactly "{}\n" on stdout under all circumstances.
-// 3. Normalizes payload to a canonical event or triggers silent worker launch.
-// 4. Bounded 25ms IPC dispatch to worker.
+//  1. Defensively reads stdin with size and time bounds.
+//  2. Writes nothing to stdout under all circumstances. Claude Code documents
+//     "exit 0 with no output" as a plain success; on SessionStart and
+//     UserPromptSubmit any plain stdout would be added to the model's context,
+//     so silence is the only output guaranteed to have no effect.
+//  3. Normalizes payload to a canonical event or triggers silent worker launch.
+//  4. Bounded 25ms IPC dispatch to worker.
 func (rcv *Receiver) ProcessHook(ctx context.Context, stdin io.Reader, stdout io.Writer) (*HookResult, error) {
 	start := time.Now()
 	res := &HookResult{}
@@ -85,9 +91,9 @@ func (rcv *Receiver) ProcessHook(ctx context.Context, stdin io.Reader, stdout io
 	var eventToSend *events.Event
 	traceClassification := "ignored"
 
-	// Guarantee neutral "{}\n" stdout output regardless of outcome
+	// Guarantee silent stdout regardless of outcome (stdout is intentionally unused).
+	_ = stdout
 	defer func() {
-		_, _ = fmt.Fprintln(stdout, "{}")
 		res.TotalDuration = time.Since(start)
 
 		if trace.HookEventName != "" {
@@ -156,12 +162,14 @@ func (rcv *Receiver) ProcessHook(ctx context.Context, stdin io.Reader, stdout io
 			}
 		}
 
-		resolvedSounds := rcv.SoundsDir
-		if resolvedSounds == "" {
-			resolvedSounds = preview.ResolveSoundsDir("", "")
+		// Only an explicit SoundsDir is forwarded. When empty, the worker resolves
+		// the directory from config (sounds_dir) so user sounds are never overridden
+		// by bundled starter sounds.
+		// Without a resolvable socket path, do not spawn: the worker would bind a
+		// different default endpoint that this hook can never reach.
+		if rcv.SocketPath != "" {
+			_ = worker.SpawnDetachedWorker(rcv.BinaryPath, rcv.SocketPath, resolvedConfig, rcv.SoundsDir)
 		}
-
-		_ = worker.SpawnDetachedWorker(rcv.BinaryPath, rcv.SocketPath, resolvedConfig, resolvedSounds)
 		res.Dropped = true
 		res.DropReason = "SessionStart triggered silent worker startup"
 		return res, nil
@@ -194,7 +202,11 @@ func (rcv *Receiver) ProcessHook(ctx context.Context, stdin io.Reader, stdout io
 
 	// 3. Dispatch to worker over IPC with 25ms deadline (no retries)
 	ipcStart := time.Now()
-	ipcCtx, cancel := context.WithTimeout(ctx, HookIPCTimeout)
+	ipcTimeout := HookIPCTimeout
+	if rcv.IPCTimeout > 0 {
+		ipcTimeout = rcv.IPCTimeout
+	}
+	ipcCtx, cancel := context.WithTimeout(ctx, ipcTimeout)
 	defer cancel()
 
 	_, err = ipc.Send(ipcCtx, rcv.SocketPath, ipc.Request{

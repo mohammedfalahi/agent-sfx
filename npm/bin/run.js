@@ -37,8 +37,12 @@ function main() {
     process.exit(1);
   }
 
+  // Binaries live next to this launcher (<launcher dir>/<platform-arch>/), and
+  // bundled starter sounds live in the package root (<launcher dir>/../sounds).
+  // This holds for both the Gemini extension layout (bin/run.js) and the
+  // Claude Code plugin layout (runtime/run.js).
   const packageDir = path.resolve(__dirname, '..');
-  const binaryPath = path.join(packageDir, 'bin', archDir, binaryName);
+  const binaryPath = path.join(__dirname, archDir, binaryName);
 
   if (!fs.existsSync(binaryPath)) {
     console.error(`Agent SFX: Prebuilt binary not found at ${binaryPath}`);

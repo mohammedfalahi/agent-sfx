@@ -3,6 +3,7 @@
 package claude_test
 
 import (
+	"agent-sfx/internal/testutil"
 	"bytes"
 	"fmt"
 	"os"
@@ -16,18 +17,7 @@ import (
 )
 
 func getCompiledBinary(t *testing.T) string {
-	binPath, err := filepath.Abs(filepath.Join("..", "..", "..", "bin", "agent-sfx"))
-	if err != nil {
-		t.Fatalf("failed to resolve binary path: %v", err)
-	}
-
-	if _, err := os.Stat(binPath); err != nil {
-		cmd := exec.Command("go", "build", "-o", binPath, "../../../cmd/agent-sfx")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("failed to compile binary: %v, output: %s", err, string(out))
-		}
-	}
-	return binPath
+	return testutil.BuildAgentSFX(t)
 }
 
 func TestSubprocess_SessionStartLaunchesDetachedWorker(t *testing.T) {
@@ -63,12 +53,12 @@ func TestSubprocess_SessionStartLaunchesDetachedWorker(t *testing.T) {
 		t.Fatalf("hook execution failed: %v, stderr: %s", runErr, stderr.String())
 	}
 
-	// 1. Verify hook process exited quickly and emitted exactly "{}\n"
+	// 1. Verify hook process exited quickly and emitted no stdout
 	if elapsed > 1500*time.Millisecond {
 		t.Errorf("hook process took too long to exit: %v", elapsed)
 	}
-	if stdout.String() != "{}\n" {
-		t.Errorf("expected stdout \"{}\\n\", got %q", stdout.String())
+	if stdout.String() != "" {
+		t.Errorf("expected empty stdout, got %q", stdout.String())
 	}
 
 	// 2. Verify that detached worker became reachable after hook exit
@@ -106,8 +96,8 @@ func TestSubprocess_SessionStartLaunchesDetachedWorker(t *testing.T) {
 	if err := hookCmd2.Run(); err != nil {
 		t.Fatalf("second hook run failed: %v", err)
 	}
-	if stdout2.String() != "{}\n" {
-		t.Errorf("expected second hook stdout \"{}\\n\", got %q", stdout2.String())
+	if stdout2.String() != "" {
+		t.Errorf("expected empty second hook stdout, got %q", stdout2.String())
 	}
 
 	st3, err := worker.StatusDaemon(isolatedSocket)
@@ -150,8 +140,8 @@ func TestSubprocess_NeutralOutputAndExitZero(t *testing.T) {
 				t.Fatalf("expected exit code 0, got error: %v, stderr: %s", err, stderr.String())
 			}
 
-			if stdout.String() != "{}\n" {
-				t.Errorf("expected stdout \"{}\\n\", got %q", stdout.String())
+			if stdout.String() != "" {
+				t.Errorf("expected empty stdout, got %q", stdout.String())
 			}
 		})
 	}
@@ -183,8 +173,8 @@ func TestSubprocess_StalledStdinTimeout(t *testing.T) {
 		t.Fatalf("expected exit code 0 on stalled stdin, got error: %v, stderr: %s", err, stderr.String())
 	}
 
-	if stdout.String() != "{}\n" {
-		t.Errorf("expected stdout \"{}\\n\", got %q", stdout.String())
+	if stdout.String() != "" {
+		t.Errorf("expected empty stdout, got %q", stdout.String())
 	}
 
 	if elapsed > 1500*time.Millisecond {

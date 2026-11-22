@@ -17,7 +17,9 @@ import (
 	"agent-sfx/internal/worker"
 )
 
-const AppVersion = "0.1.0-m1"
+// AppVersion is the release version; keep it in sync with the plugin and
+// extension manifests (checked by internal/packaging tests).
+const AppVersion = "0.1.0-dev"
 
 type AudioReport struct {
 	BackendName string `json:"backend_name"`

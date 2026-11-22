@@ -87,20 +87,28 @@ func validateClaudeAskUserPayload(raw json.RawMessage) bool {
 	return true
 }
 
-// verifiedStopFailureErrors defines the exact error classification strings emitted by Claude Code 2.1.162
-// in the StopFailure hook payload (defined by the internal jS8 schema enum).
-// These are distinct from internal Anthropic provider/SDK error names (e.g. rate_limit_error vs rate_limit).
+// verifiedStopFailureErrors defines the exact `error` values Claude Code sends in the
+// StopFailure hook payload. Source: the hooks reference (code.claude.com/docs/en/hooks),
+// checked 2026-11-19 against Claude Code 2.1.306; "overloaded" is retained from the
+// 2.1.162 binary enum for older installs (current docs map HTTP 529 to server_error).
+// These are distinct from Anthropic API/SDK error names (e.g. rate_limit_error vs rate_limit).
+//
+// Product decision: every value, including billing_error and rate_limit, maps to the
+// general `error` sound. None is treated as usage_exhausted, because none of them proves
+// that the user's allowance is exhausted.
 var verifiedStopFailureErrors = map[string]bool{
-	"authentication_failed": true,
-	"oauth_org_not_allowed": true,
-	"billing_error":         true,
-	"rate_limit":            true,
-	"overloaded":            true,
-	"invalid_request":       true,
-	"model_not_found":       true,
-	"server_error":          true,
-	"unknown":               true,
-	"max_output_tokens":     true,
+	"authentication_failed":  true,
+	"oauth_org_not_allowed":  true,
+	"account_on_hold":        true,
+	"billing_error":          true,
+	"rate_limit":             true,
+	"overloaded":             true,
+	"invalid_request":        true,
+	"model_not_found":        true,
+	"server_error":           true,
+	"max_output_tokens":      true,
+	"cloud_credential_error": true,
+	"unknown":                true,
 }
 
 // parseStopFailureError checks whether the error field matches a verified classification string.

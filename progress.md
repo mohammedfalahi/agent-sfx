@@ -1,5 +1,69 @@
 # Progress
 
+## 2026-11-20: Claude Code plugin completion (automated verification only)
+
+Focus: Claude Code on macOS. Gemini compatibility is kept. No agent settings were changed, no plugin was installed, and no live Claude session was run. The deployed and linked Gemini extension (`~/Library/Application Support/agent-sfx/gemini-extension`) was not touched.
+
+### Fixed
+- **Custom sounds were ignored whenever a hook or `worker start` launched the worker.**
+  - The hook resolved a sounds folder without reading config, and the Node launcher's `AGENT_SFX_BUNDLED_SOUNDS_DIR` won.
+  - That folder was then passed to the worker as `--sounds-dir`, which overrides `sounds_dir`.
+  - Now hooks and `worker start` forward only an explicit `--sounds-dir`, and the worker resolves the folder from config.
+  - `ResolveSoundsDir` now checks the user's folder before the bundled sounds.
+  - The bundled sounds are a **per-event fallback** (`SelectSoundFromDirs`) in the worker and in `preview`.
+  - `status` now shows the worker's active sounds folder and fallback folder (new optional fields in the IPC status response).
+- Hooks no longer start a worker when the socket path cannot be resolved. Previously that worker bound the default endpoint, which the hook can never reach.
+- Gemini `SessionStart` (in the repo's `npm/hooks/hooks.json`) now runs `hook gemini` instead of `worker start`. That command printed non-JSON text on stdout, which Gemini displays as a system message, and it waited up to 1 s for the worker.
+
+### Claude plugin (`npm/claude/`)
+- Hook stdout is now empty. Claude Code documents "exit 0, no output" as success. Plain stdout on `SessionStart` and `UserPromptSubmit` would be added to the model's context.
+- `hooks.json`:
+  - removed the undocumented `name` fields;
+  - added `timeout: 10`;
+  - removed matchers from events that ignore them;
+  - `PreToolUse` now uses the exact matcher `AskUserQuestion`.
+- The launcher moved from `bin/` to `runtime/`, because Claude Code adds a plugin's `bin/` to the Bash tool's PATH.
+- The Node launcher was replaced by a POSIX sh launcher (`runtime/agent-sfx`).
+  - Reason: Node startup took about 320 ms on this Mac.
+  - Measured hook cost with the sh launcher: about 70 ms median vs about 38 ms for the bare binary, interleaved, under load average about 19. With Node it was about 356 ms.
+  - The plugin no longer needs Node.
+- Committed (stale) plugin binaries were removed. `scripts/build-claude-plugin.sh` builds `runtime/darwin-{arm64,x64}/agent-sfx`, which git ignores.
+- `StopFailure` allowlist updated from the current hooks docs: added `account_on_hold` and `cloud_credential_error`, and kept `overloaded` for older versions. All values still map to the general `error` sound (product decision; billing errors are not `usage_exhausted`).
+- `/agent-sfx:sfx` skill rewritten:
+  - uses `${CLAUDE_SKILL_DIR}`;
+  - has `disable-model-invocation: true`;
+  - runs one fixed Bash command;
+  - describes the CLI's real output.
+- `claude plugin validate --strict` passes. The only warning is a missing listing icon.
+- `AppVersion` is now `0.1.0-dev` and is checked against `plugin.json`.
+
+### Tests added or changed
+- Subprocess tests now always build a fresh binary (`internal/testutil`). They previously reused `bin/agent-sfx` if it existed, which was an October build.
+- New regression tests for the sounds-folder bug, through the Claude hook, the Gemini hook, and `worker start`. Each runs with an isolated HOME, sounds disabled, and a private socket. They fail when the old behavior is reintroduced.
+- Selector, resolver, and scheduler fallback tests.
+- Spawn-guard tests that use a fake worker binary.
+- `internal/packaging`:
+  - manifest, `hooks.json`, skill, and layout checks;
+  - shell launcher tests;
+  - an end-to-end run of the exact `hooks.json` commands through the launcher to an isolated worker, checked through the trace log. No audio plays.
+- `npm/test_launcher.js` rewritten with fake binaries. It previously failed on a clean checkout because it needed an uncommitted Windows `.exe`; the earlier "9/9 passing" record did not reproduce.
+- Two existing tests with 25 ms timing limits (`TestHook_RealPayloadDispatchesToWorker` and the Gemini integration test) failed under full-suite `-race` load. Both receivers gained a test-only `IPCTimeout` override, and the production 25 ms deadline is unchanged.
+
+### Results (macOS arm64, Go 1.27.1, Node 26.12.1)
+- `go test -race ./...` passes across multiple consecutive full runs.
+- `go vet ./...` (darwin and windows) is clean, and `gofmt -l .` is clean.
+- linux and windows cross-builds succeed.
+- `node npm/test_launcher.js`: 11/11.
+
+### Not verified
+- Hooks firing in a live Claude Code session, audible playback, and the `/agent-sfx:sfx` skill.
+- Windows and Linux for the Claude plugin, which is macOS only for now.
+
+### Known remaining issues
+- `setup deploy` still rewrites both deployed folders together and never deletes stale files. A redeploy would leave the old `claude-plugin/bin/` in place.
+- `PermissionRequest` has no `tool_use_id`, so two prompts for the same tool within 5 s count as duplicates.
+- No worker version check: a worker started from an older binary (for example the deployed Gemini copy) serves the Claude hooks too, and keeps the old sounds-folder behavior until it is restarted with a new binary.
+
 ## Current state
 - **Open-Source Standardization Milestone**: Completed and verified.
   - Security Policy (`SECURITY.md`) created detailing threat model, local-only IPC boundary, child execution safety without shell interpolation, bounded audio resources (15s ceiling, 25 MiB max), fail-open hook contract, and private vulnerability disclosure.

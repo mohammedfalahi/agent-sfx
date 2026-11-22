@@ -57,9 +57,9 @@ func TestHook_NeutralOutputAlways(t *testing.T) {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
-			// Output MUST be exactly "{}\n"
-			if stdout.String() != "{}\n" {
-				t.Fatalf("expected stdout \"{}\\n\", got %q", stdout.String())
+			// Output MUST be empty (documented Claude Code no-op)
+			if stdout.String() != "" {
+				t.Fatalf("expected empty stdout, got %q", stdout.String())
 			}
 
 			if !res.Dropped {
@@ -90,8 +90,8 @@ func TestHook_StalledStdinNeutral(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if stdout.String() != "{}\n" {
-		t.Errorf("expected stdout \"{}\\n\", got %q", stdout.String())
+	if stdout.String() != "" {
+		t.Errorf("expected empty stdout, got %q", stdout.String())
 	}
 
 	if !res.Dropped {
@@ -120,8 +120,8 @@ func TestHook_DeadWorkerNeutral(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if stdout.String() != "{}\n" {
-		t.Fatalf("expected stdout \"{}\\n\", got %q", stdout.String())
+	if stdout.String() != "" {
+		t.Fatalf("expected empty stdout, got %q", stdout.String())
 	}
 
 	// Must fail quickly due to 25ms IPC deadline
@@ -157,6 +157,9 @@ func TestHook_RealPayloadDispatchesToWorker(t *testing.T) {
 	rcv := &claude.Receiver{
 		SocketPath: sockPath,
 		TestMode:   false,
+		// This test verifies delivery, not the 25 ms production deadline (covered
+		// by TestHook_DeadWorkerNeutral); allow headroom under -race and load.
+		IPCTimeout: 2 * time.Second,
 	}
 
 	payload := `{
@@ -183,8 +186,8 @@ func TestHook_RealPayloadDispatchesToWorker(t *testing.T) {
 		t.Fatalf("ProcessHook error: %v", err)
 	}
 
-	if stdout.String() != "{}\n" {
-		t.Errorf("expected stdout \"{}\\n\", got %q", stdout.String())
+	if stdout.String() != "" {
+		t.Errorf("expected empty stdout, got %q", stdout.String())
 	}
 
 	if !res.SentEvent {
