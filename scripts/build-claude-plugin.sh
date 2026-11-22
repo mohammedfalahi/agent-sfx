@@ -2,9 +2,14 @@
 # Build the Agent SFX binaries into the Claude Code plugin directory.
 #
 # Usage: scripts/build-claude-plugin.sh [output-plugin-dir]
-#   Default output: npm/claude (in this repository). The binaries are build
-#   artifacts and are ignored by git; run this before loading the plugin with
-#   `claude --plugin-dir` or validating it.
+#   Default output: npm/claude (in this repository). The binaries are committed
+#   to git, because Claude Code installs the plugin straight from the GitHub
+#   repository and runs no build step. Rebuild and commit them whenever Go
+#   code changes, and bump "version" in the plugin and marketplace manifests
+#   for each release so `claude plugin update` picks up the new code.
+#
+#   The build is reproducible (-trimpath, -buildvcs=false, stripped), so
+#   rebuilding unchanged source with the same Go version gives identical files.
 #
 # Targets macOS (darwin-arm64 and darwin-x64). Requires Go; no network access
 # is needed when module dependencies are already in the local module cache.
@@ -25,6 +30,6 @@ for arch in arm64 amd64; do
   esac
   out="$plugin_dir/runtime/$dir/agent-sfx"
   mkdir -p "$(dirname -- "$out")"
-  (cd "$repo_root" && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -o "$out" ./cmd/agent-sfx)
+  (cd "$repo_root" && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$out" ./cmd/agent-sfx)
   echo "built $out"
 done

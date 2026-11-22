@@ -6,21 +6,19 @@ This guide takes you from nothing installed to hearing your own custom sounds.
 
 ---
 
-## ⚠️ Read this first: install status (checked 2026-11-22)
-
-**You can't install this from GitHub yet.** The steps in this guide describe how installation is *meant* to work. They won't work until the project maintainer publishes four fixes, listed in [For the maintainer](#for-the-maintainer-what-must-happen-before-github-install-works) at the end.
-
-Here's what goes wrong today, in plain terms:
-
-1. **Claude Code can't find the plugin in the repository.** Claude Code looks for a file called `.claude-plugin/marketplace.json` at the top level of the GitHub repository. This project keeps that file in a subfolder (`npm/claude/`), so the "add marketplace" step fails.
-2. **The latest version isn't on GitHub.** The working version exists only on the maintainer's computer. GitHub still has an older version that needs Node.js and uses different files.
-3. **The program the sounds depend on would be missing.** The sound program for Mac (`runtime/darwin-arm64/agent-sfx` and `runtime/darwin-x64/agent-sfx`) is deliberately excluded from GitHub. Even after the fixes above, an installed copy would have no program to run, and you'd hear nothing.
-4. **Nobody has tested it in a real Claude Code session yet.** Automated tests pass, but no one has yet confirmed that the sounds play in a live session.
+## Install status (checked 2026-11-22)
 
 Each step below is marked:
 
-- ✅ **Verified**: checked against the project's code, the official Claude Code docs, or Claude Code 2.1.330 on a Mac.
-- 🧪 **Needs testing**: should work, but hasn't been tried end to end. Depends on the fixes above.
+- ✅ **Verified**: tested on a Mac with Claude Code 2.1.330, or checked against the project's code and the official Claude Code docs.
+- 🧪 **Needs testing**: expected to work, but not yet confirmed end to end.
+
+What has been tested so far:
+
+- **Installing, listing, and uninstalling** with the commands in this guide worked in a clean, throwaway Claude Code setup. The plugin was installed from a copy of the repository served the same way GitHub serves it: Claude Code cloned the repository with git. The installed copy kept its program files and permissions, and Claude Code listed its 7 hooks and the `/agent-sfx:sfx` command.
+- **The installed hooks** were run against recorded Claude Code events. Each event produced the right sound event, with the plugin's built-in sounds.
+- **Sounds in a live Claude Code session:** the maintainer heard `task_started`, `task_finished`, `permission_requested`, `waiting_for_user`, and `error` for a failed tool, with the plugin loaded from a local copy (`claude --plugin-dir npm/claude`), not installed from GitHub.
+- **Not yet tested live:** the `/agent-sfx:sfx` command, custom sounds and fallback, the silent session start, and the install directly from GitHub followed by a live session.
 
 ---
 
@@ -65,38 +63,38 @@ cd ~/agent-sfx-test
 
 A **marketplace** is a list of plugins that Claude Code knows where to download from. You add the Agent SFX marketplace once, then install the plugin from it.
 
-- Marketplace name: `agent-sfx-local`
+- Marketplace name: `agent-sfx`
 - Plugin name: `agent-sfx`
-- Full plugin ID, used in commands: `agent-sfx@agent-sfx-local`
+- Full plugin ID, used in commands: `agent-sfx@agent-sfx`
 
 ### Option A: from Terminal (recommended)
 
-**Step 1. Add the marketplace.** 🧪 *(Fails today. See the status note at the top.)*
+**Step 1. Add the marketplace.** ✅ *(tested from a git copy of the repository; 🧪 directly from GitHub)*
 
 ```bash
 claude plugin marketplace add mohammedfalahi/agent-sfx
 ```
 
-This tells Claude Code to read the plugin list from the GitHub repository `github.com/mohammedfalahi/agent-sfx`. Nothing is installed yet.
+This tells Claude Code to read the plugin list from the GitHub repository `github.com/mohammedfalahi/agent-sfx`. Nothing is installed yet. You should see `✔ Successfully added marketplace: agent-sfx`.
 
-**Step 2. Install the plugin.** 🧪
+**Step 2. Install the plugin.** ✅
 
 ```bash
-claude plugin install agent-sfx@agent-sfx-local
+claude plugin install agent-sfx@agent-sfx
 ```
 
-This downloads the plugin and turns it on for every project on your Mac (Claude Code calls this "user scope").
+This downloads the plugin and turns it on for every project on your Mac (Claude Code calls this "user scope"). You should see `✔ Successfully installed plugin: agent-sfx@agent-sfx (scope: user)`.
 
-**Step 3. Confirm it's installed and enabled.** ✅ *(the command exists)*
+**Step 3. Confirm it's installed and enabled.** ✅
 
 ```bash
 claude plugin list
 ```
 
-Look for `agent-sfx@agent-sfx-local` in the list, shown as enabled. Plugins are enabled as soon as they're installed. If it shows as disabled, run:
+Look for `agent-sfx@agent-sfx` in the list, with `Version: 0.1.0` and `Status: ✔ enabled`. Plugins are enabled as soon as they're installed. If it shows as disabled, run:
 
 ```bash
-claude plugin enable agent-sfx@agent-sfx-local
+claude plugin enable agent-sfx@agent-sfx
 ```
 
 ### Option B: from inside Claude Code
@@ -105,10 +103,10 @@ Start Claude Code, then type these one at a time:
 
 ```text
 /plugin marketplace add mohammedfalahi/agent-sfx
-/plugin install agent-sfx@agent-sfx-local
+/plugin install agent-sfx@agent-sfx
 ```
 
-The second command opens a details panel where you choose where to install it. Pick the option for **you / all projects** (user scope). 🧪
+The second command opens a details panel where you choose where to install it. Pick the option for **you / all projects** (user scope). 🧪 *(the in-session version hasn't been tried)*
 
 ### Start a new session
 
@@ -137,7 +135,7 @@ Type any of these into Claude Code:
 | `/agent-sfx:sfx off` | Mutes all sounds (and stops a sound that's playing) |
 | `/agent-sfx:sfx on` | Turns sounds back on |
 
-Status: 🧪 *(not tried in a live session yet)*
+Status: ✅ *(the command it runs was tested on an installed copy)* · 🧪 *(the `/agent-sfx:sfx` command itself hasn't been tried in a live session)*
 
 Claude will ask permission to run one command. That's expected, so approve it. You'll probably hear the **permission** chime at that moment, which is a good first sign the plugin works.
 
@@ -148,10 +146,12 @@ Your on/off choice is saved, so it stays in effect in future sessions and for th
 The plugin's program lives inside Claude Code's plugin folder. To avoid typing the long path every time, save it in a shortcut variable for this Terminal window:
 
 ```bash
-SFX="$HOME/.claude/plugins/cache/agent-sfx-local/agent-sfx/0.1.0/runtime/agent-sfx"
+SFX="$HOME/.claude/plugins/cache/agent-sfx/agent-sfx/0.1.0/runtime/agent-sfx"
 ```
 
-Status: 🧪 *(path follows Claude Code's documented layout: `cache/<marketplace>/<plugin>/<version>/`)*
+Status: ✅ *(this is where the test install put it; `status`, `on`, `off`, and `worker stop` were run from there)*
+
+If you get `no such file or directory`, the version number may have changed after an update. Run `claude plugin list`, and put the version it shows in place of `0.1.0`.
 
 Then:
 
@@ -252,7 +252,7 @@ Only add sounds you have the rights to use.
 
 ## 5. Live tests: one per event
 
-Do these in your test folder (`~/agent-sfx-test`) in a fresh Claude Code session. Status for all of these: 🧪 *(none has been confirmed live yet)*.
+Do these in your test folder (`~/agent-sfx-test`) in a fresh Claude Code session. Status: every event was checked with recorded Claude Code events on an installed copy. Tests 1–5 were also heard live by the maintainer with a local copy (✅ live below). 🧪 None has been run live after a GitHub install yet.
 
 **Wait about 6 seconds between tests.** Two timing rules can make a test look broken when it isn't:
 
@@ -261,7 +261,7 @@ Do these in your test folder (`~/agent-sfx-test`) in a fresh Claude Code session
 
 **Check the permission mode:** the permission test needs Claude Code to *ask* you before running commands, which it does by default. If you've turned on auto-accept, auto mode, or "bypass permissions", or you've always-allowed shell commands, you won't get the prompt and so won't hear that sound. Press `Shift+Tab` to cycle modes; the current mode is shown at the bottom of the screen.
 
-### Test 1: message sent → `task_started`
+### Test 1: message sent → `task_started` ✅ live
 
 Type:
 
@@ -271,7 +271,7 @@ Say hello in one short sentence.
 
 **You should hear:** a quick rising chirp as soon as you press Return, then (test 2) a chord when Claude finishes.
 
-### Test 2: reply finished → `task_finished`
+### Test 2: reply finished → `task_finished` ✅ live
 
 This plays at the end of test 1. **You should hear:** a bright three-note chord when Claude's reply ends.
 
@@ -279,7 +279,7 @@ If Claude answers in under about 1.5 seconds, the finish sound can land in the q
 
 The finish sound means Claude's turn ended. It doesn't mean the task succeeded. It also doesn't play if you interrupt Claude with `Esc`.
 
-### Test 3: permission needed → `permission_requested`
+### Test 3: permission needed → `permission_requested` ✅ live
 
 Type:
 
@@ -289,7 +289,7 @@ Use the Bash tool to run: mkdir agent-sfx-permission-test
 
 **You should hear:** a two-note chime when the "Allow this command?" prompt appears. Choose **Yes**. The command only creates an empty folder inside your test folder. You'll also hear the finish chord when Claude wraps up.
 
-### Test 4: Claude asks you a question → `waiting_for_user`
+### Test 4: Claude asks you a question → `waiting_for_user` ✅ live
 
 Type:
 
@@ -299,7 +299,7 @@ Use the AskUserQuestion tool to ask me to pick a color: red, green, or blue.
 
 **You should hear:** a gentle double "ping" when the multiple-choice question appears. You should *not* also hear the permission chime for this. Pick any answer.
 
-### Test 5: something fails → `error`
+### Test 5: something fails → `error` ✅ live
 
 Type:
 
@@ -311,11 +311,11 @@ If Claude asks permission first, you'll hear the permission chime; choose **Yes*
 
 If you cancel a command yourself, no error sound plays.
 
-### Test 6: session start (silent)
+### Test 6: session start (silent) 🧪
 
 Start a new session, wait a few seconds, then type `/agent-sfx:sfx status`. **You should see** that the worker is running. You don't hear anything at session start.
 
-### Test 7: mute and unmute
+### Test 7: mute and unmute 🧪
 
 Type `/agent-sfx:sfx off`, wait 6 seconds, then repeat test 1. **You should hear nothing.** Type `/agent-sfx:sfx on`, wait 6 seconds, and repeat test 1. The sounds should be back.
 
@@ -340,9 +340,10 @@ This deletes the test folder and the empty folder created in test 3. Only run it
 | What you see or hear | What to try |
 | --- | --- |
 | **No sounds at all** | 1) Run `"$SFX" preview task_finished`. If that's silent, check your Mac's volume and output device. 2) Run `/agent-sfx:sfx status` and make sure sounds are on. 3) Run `claude plugin list` and confirm the plugin is enabled. 4) Quit Claude Code and start a new session. |
-| An error mentioning **"prebuilt binary not found"** | The sound program is missing from the installed copy. This is blocker 3 in the status note at the top. It's not something you can fix; the maintainer has to publish the program. |
+| An error mentioning **"prebuilt binary not found"** | The installed copy is missing its program. Uninstall and reinstall the plugin (see below). If it still happens, report it to the project: the maintainer may need to publish the program again. |
 | An error mentioning **"supports macOS only"** | You're not on a Mac. The Claude Code plugin works only on macOS. |
-| `marketplace add` says it **can't find a marketplace** | This is blocker 1 in the status note at the top. It's expected until it's fixed. |
+| `marketplace add` says **"Marketplace file not found"** | GitHub has an older copy of the project without the plugin list. Wait for the maintainer to publish it, then try again. |
+| `marketplace add` says the marketplace **already exists** | You added it before. Skip to step 2, or run `claude plugin marketplace update agent-sfx`. |
 | **One specific custom sound never plays** | The file is probably the wrong format (see [Supported format](#supported-format-)). Convert it with `ffmpeg`. Wrong-format files make that event silent. |
 | **Custom sounds ignored; built-in ones still play** | The helper started before your sounds folder existed. Run `"$SFX" worker stop`, then start a new Claude Code session. Check the folder names are spelled exactly right. |
 | **Some sounds are skipped** | That's the 1.2-second quiet gap and 5-second no-repeat rule. Use shorter clips, or lower `cooldown_ms` in `config.json`. |
@@ -355,8 +356,8 @@ This deletes the test folder and the empty folder created in test 3. Only run it
 ### Updating 🧪
 
 ```bash
-claude plugin marketplace update agent-sfx-local
-claude plugin update agent-sfx@agent-sfx-local
+claude plugin marketplace update agent-sfx
+claude plugin update agent-sfx@agent-sfx
 "$SFX" worker stop
 ```
 
@@ -368,19 +369,21 @@ Then quit Claude Code and start a new session.
 
 Updates aren't automatic for this marketplace. Claude Code only auto-updates official marketplaces unless you switch it on under `/plugin` → **Marketplaces**. After an update, the version number in the `SFX` path changes. Use the new version from `claude plugin list`.
 
-### Uninstalling 🧪
+### Uninstalling ✅
 
 Run these in order:
 
 ```bash
 "$SFX" worker stop
-claude plugin uninstall agent-sfx@agent-sfx-local
-claude plugin marketplace remove agent-sfx-local
+claude plugin uninstall agent-sfx@agent-sfx
+claude plugin marketplace remove agent-sfx
 ```
 
 1. Stops the background helper. Do this first, because the next step deletes the program.
 2. Removes the plugin.
 3. Removes the marketplace from Claude Code's list.
+
+Claude Code may keep a copy of the plugin files in its cache for a while after you uninstall. That's normal, and Claude Code cleans it up itself.
 
 **Optional, permanent:** delete your settings and custom sounds. This folder is also used by the Agent SFX Gemini CLI extension, so skip this step if you use that.
 
@@ -391,7 +394,7 @@ rm -r "$HOME/Library/Application Support/agent-sfx"
 To turn the plugin off for **just one project** without uninstalling, add this to that project's `.claude/settings.json`:
 
 ```json
-{ "enabledPlugins": { "agent-sfx@agent-sfx-local": false } }
+{ "enabledPlugins": { "agent-sfx@agent-sfx": false } }
 ```
 
 ---
@@ -419,19 +422,23 @@ To turn the plugin off for **just one project** without uninstalling, add this t
 
 **Not yet verified**
 
-- The GitHub install itself (see the status note at the top).
-- Sounds firing at the right moments in a live Claude Code session.
-- The `/agent-sfx:sfx` controls in a live session.
-- The terminal shortcut path and the update and uninstall steps.
+- Installing directly from GitHub, followed by a live session.
+- In a live session: the `/agent-sfx:sfx` controls, custom sounds and fallback to the built-in sounds, and the silent session start. (These were checked with automated tests and recorded events only.)
+- The `error` sound for API errors (`StopFailure`). This is deliberately tested only with recorded examples.
+- Installing from inside Claude Code with `/plugin install`, instead of from Terminal.
+- Updating to a newer version (no newer version exists yet).
 
 ---
 
-## For the maintainer: what must happen before GitHub install works
+## For the maintainer: release checklist
 
-Checked on 2026-11-22. The local branch `master` and GitHub `origin/master` both point at `e18bab0`, and all Claude plugin changes since then are uncommitted.
+GitHub install works when all of these are true on `master`:
 
-1. **Add a marketplace file at the repository root.** Create `.claude-plugin/marketplace.json` at the top level of the repo, listing the plugin with `"source": "./npm/claude"`. The official docs say `claude plugin marketplace add` reads only `<repo root>/.claude-plugin/marketplace.json`, and has no option for a file in a subfolder. The alternative, an `extraKnownMarketplaces` settings entry with a custom `path`, means users have to edit settings by hand, so it isn't beginner-friendly. If you rename the marketplace (the current name `agent-sfx-local` and its description "Local Agent SFX Marketplace" read oddly for a GitHub install), update every command in this guide.
-2. **Ship the Mac binaries.** `.gitignore` excludes `/npm/claude/runtime/darwin-*/`, so a GitHub install gets the launcher but not the binaries, and every hook fails with "prebuilt binary not found". Either commit the two binaries (about 6 MB each), or point the marketplace entry at a release archive (an `archive` source with a `sha256`).
-3. **Commit and push the current work.** That includes the new `npm/claude/runtime/` launcher, the updated `hooks.json` and `SKILL.md`, `scripts/`, the deletion of the old `npm/claude/bin/`, and the related Go changes. GitHub currently serves the old plugin, which runs hooks through `node bin/run.js`.
-4. **Bump `version` in `plugin.json` on each release.** The version is pinned at `0.1.0`, and Claude Code treats a pinned version as unchanged across commits, so `claude plugin update` won't deliver new code until the number changes.
-5. **Live-test, then update this guide.** Run section 5 in a real session and switch the 🧪 marks to ✅ as each step is confirmed. `claude plugin validate ./npm/claude` passes today, with one warning about a missing plugin icon.
+- `.claude-plugin/marketplace.json` at the repository root names the marketplace `agent-sfx` and lists the plugin with `"source": "./npm/claude"`. `claude plugin marketplace add owner/repo` only reads the root file. `npm/claude/.claude-plugin/marketplace.json` (`agent-sfx-local`) stays for local installs and `setup deploy`, and the different name keeps the two from colliding.
+- The Mac binaries in `npm/claude/runtime/darwin-arm64/` and `npm/claude/runtime/darwin-x64/` are committed. Claude Code copies the plugin from a git clone and runs no build step.
+
+For every release:
+
+1. Run `scripts/build-claude-plugin.sh` and commit the two binaries. The build is reproducible: unchanged source and the same Go version give identical files, so binaries only show up in the diff when the code changed.
+2. Bump `version` in `npm/claude/.claude-plugin/plugin.json`, in both `marketplace.json` files, and in `AppVersion` (`internal/doctor/doctor.go`). Claude Code treats a pinned version as unchanged across commits, so `claude plugin update` won't deliver new code until the number changes. Update the `0.1.0` in this guide's `SFX` path too.
+3. Run `go test ./...` (`internal/packaging` checks that the manifests agree, that the binaries are present, executable, not ignored by git, and report the plugin version), then `claude plugin validate .` and `claude plugin validate ./npm/claude`.

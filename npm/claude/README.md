@@ -2,7 +2,7 @@
 
 Plays short local sound effects when key things happen in a Claude Code session. Everything runs on your machine: no network, no telemetry, and Claude's behavior is unchanged.
 
-**Status:** macOS only. Automated tests pass. Not yet verified in a live Claude Code session (see "What still needs live testing" below).
+**Status:** macOS only. Automated tests pass. In a live Claude Code session (loaded with `claude --plugin-dir npm/claude`), `task_started`, `task_finished`, `permission_requested`, `waiting_for_user`, and `error` for a failed tool were heard. Other items are listed under "What still needs live testing" below.
 
 ## What plays when
 
@@ -33,7 +33,7 @@ Only one sound plays at a time, followed by a short quiet period (1.2 s by defau
 From the repository root:
 
 ```bash
-scripts/build-claude-plugin.sh          # builds runtime/darwin-*/agent-sfx
+scripts/build-claude-plugin.sh          # rebuilds runtime/darwin-*/agent-sfx (only needed after Go changes)
 npm/claude/runtime/agent-sfx doctor     # checks the audio player, config, and sounds
 npm/claude/runtime/agent-sfx preview task_finished
 claude --plugin-dir npm/claude          # loads the plugin for this session only
@@ -41,20 +41,35 @@ claude --plugin-dir npm/claude          # loads the plugin for this session only
 
 `--plugin-dir` doesn't install anything or change your settings; the plugin is gone when the session ends.
 
-## Install
+## Install from GitHub
+
+No clone or build needed; the Mac binaries are committed.
+
+```bash
+claude plugin marketplace add mohammedfalahi/agent-sfx
+claude plugin install agent-sfx@agent-sfx
+```
+
+Then start a new Claude Code session. Step-by-step guide with live tests: [`docs/install-claude-code.md`](../../docs/install-claude-code.md).
+
+Uninstall:
+
+```bash
+"$HOME/.claude/plugins/cache/agent-sfx/agent-sfx/0.1.0/runtime/agent-sfx" worker stop
+claude plugin uninstall agent-sfx@agent-sfx
+claude plugin marketplace remove agent-sfx
+```
+
+## Install from a local folder
+
+This folder also contains its own marketplace, `agent-sfx-local`. It's for development and for `agent-sfx setup deploy`:
 
 ```text
 claude plugin marketplace add <path-to-npm/claude>
 claude plugin install agent-sfx@agent-sfx-local
 ```
 
-Uninstall:
-
-```text
-claude plugin uninstall agent-sfx@agent-sfx-local
-claude plugin marketplace remove agent-sfx-local
-<path-to-npm/claude>/runtime/agent-sfx worker stop
-```
+Uninstall with `claude plugin uninstall agent-sfx@agent-sfx-local`, then `claude plugin marketplace remove agent-sfx-local`, then `<path-to-npm/claude>/runtime/agent-sfx worker stop`.
 
 ## Controls
 
@@ -83,10 +98,15 @@ The same worker, config, and sounds folder are shared with the Agent SFX Gemini 
 
 ## What still needs live testing
 
+Verified live with `claude --plugin-dir npm/claude`: the `UserPromptSubmit`, `Stop`, `PermissionRequest`, `PreToolUse` (`AskUserQuestion`), and `PostToolUseFailure` hooks fired at the moments described above, and their sounds were audible.
+
 These have passed automated tests that use recorded hook payloads, but haven't been confirmed in a real Claude Code session:
 
-- Each hook firing at the moment described above, and the sound being audible.
 - The `/agent-sfx:sfx` skill.
+- Custom sounds in your sounds folder, and per-event fallback to the bundled sounds.
+- `SessionStart` starting the worker silently.
+- A live session after installing from GitHub (`agent-sfx@agent-sfx`).
+- Cancelling a tool (`is_interrupt`) producing no sound.
 - The hook cost per event. It measured about 70 ms median on a heavily loaded Mac, outside Claude Code.
 
 `StopFailure` should be tested only with recorded payloads, never by provoking real API or billing errors.
@@ -100,8 +120,8 @@ npm/claude/
 ├── hooks/hooks.json                hook registrations
 ├── skills/sfx/SKILL.md             optional /agent-sfx:sfx control skill
 ├── runtime/agent-sfx               POSIX sh launcher (picks the binary for this Mac)
-├── runtime/darwin-arm64/agent-sfx  built by scripts/build-claude-plugin.sh (not in git)
-├── runtime/darwin-x64/agent-sfx    built by scripts/build-claude-plugin.sh (not in git)
+├── runtime/darwin-arm64/agent-sfx  built by scripts/build-claude-plugin.sh (committed)
+├── runtime/darwin-x64/agent-sfx    built by scripts/build-claude-plugin.sh (committed)
 └── sounds/<event>/<event>.wav      the seven bundled starter sounds (CC0)
 ```
 

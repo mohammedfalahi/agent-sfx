@@ -516,3 +516,77 @@ func TestClaudePlugin_HookCommandsEndToEnd(t *testing.T) {
 		}
 	}
 }
+
+// TestClaudePlugin_RootMarketplace checks the marketplace that
+// `claude plugin marketplace add mohammedfalahi/agent-sfx` reads. Claude Code
+// only looks for .claude-plugin/marketplace.json at the repository root.
+func TestClaudePlugin_RootMarketplace(t *testing.T) {
+	var plugin struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	}
+	readJSON(t, filepath.Join(pluginDir(t), ".claude-plugin", "plugin.json"), &plugin)
+
+	var market struct {
+		Name    string `json:"name"`
+		Plugins []struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+			Source  string `json:"source"`
+		} `json:"plugins"`
+	}
+	readJSON(t, filepath.Join(testutil.RepoRoot(t), ".claude-plugin", "marketplace.json"), &market)
+	// A distinct name keeps the GitHub marketplace from colliding with the
+	// local "agent-sfx-local" marketplace that `agent-sfx setup deploy` creates.
+	if market.Name != "agent-sfx" {
+		t.Errorf("root marketplace name = %q, want agent-sfx (plugin ID agent-sfx@agent-sfx)", market.Name)
+	}
+	if len(market.Plugins) != 1 {
+		t.Fatalf("root marketplace must list exactly one plugin, got %d", len(market.Plugins))
+	}
+	p := market.Plugins[0]
+	if p.Name != plugin.Name || p.Version != plugin.Version || p.Source != "./npm/claude" {
+		t.Errorf("root marketplace entry %+v does not match plugin %+v with source ./npm/claude", p, plugin)
+	}
+}
+
+// TestClaudePlugin_BinariesAreShipped guards the GitHub install: Claude Code
+// copies the plugin from a git clone and runs no build step, so the Mac
+// binaries must be committed, executable, and not ignored by git.
+func TestClaudePlugin_BinariesAreShipped(t *testing.T) {
+	root := testutil.RepoRoot(t)
+	for _, arch := range []string{"darwin-arm64", "darwin-x64"} {
+		rel := filepath.Join("npm", "claude", "runtime", arch, "agent-sfx")
+		fi, err := os.Stat(filepath.Join(root, rel))
+		if err != nil {
+			t.Errorf("missing %s (run scripts/build-claude-plugin.sh)", rel)
+			continue
+		}
+		if fi.Mode()&0111 == 0 {
+			t.Errorf("%s is not executable", rel)
+		}
+		if _, err := exec.LookPath("git"); err == nil {
+			cmd := exec.Command("git", "check-ignore", "-q", "--no-index", rel)
+			cmd.Dir = root
+			if cmd.Run() == nil {
+				t.Errorf("%s is ignored by git; a GitHub install would not include it", rel)
+			}
+		}
+	}
+
+	if runtime.GOOS != "darwin" {
+		return
+	}
+	var plugin struct {
+		Version string `json:"version"`
+	}
+	readJSON(t, filepath.Join(pluginDir(t), ".claude-plugin", "plugin.json"), &plugin)
+	out, err := exec.Command(filepath.Join(pluginDir(t), "runtime", "agent-sfx"), "help").Output()
+	if err != nil {
+		t.Fatalf("shipped binary for this Mac did not run: %v", err)
+	}
+	if !strings.Contains(string(out), "(v"+plugin.Version) {
+		first, _, _ := strings.Cut(string(out), "\n")
+		t.Errorf("shipped binary reports %q, want version %s (rebuild with scripts/build-claude-plugin.sh)", first, plugin.Version)
+	}
+}

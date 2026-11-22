@@ -4,8 +4,6 @@
 *.exe
 *.test
 coverage.out
-# Claude plugin binaries are built by scripts/build-claude-plugin.sh
-/npm/claude/runtime/darwin-*/
 *.prof
 *.tgz
 *.tar.gz

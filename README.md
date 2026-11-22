@@ -56,7 +56,7 @@ Verified native hook integration. Agent SFX installs owned hooks into `.gemini/s
 | `SessionStart` | Startup / resume / clear | *(none)* | Silently launches background worker if offline without blocking agent |
 
 ### 2. Claude Code (macOS; formats checked against the 2.1.306 docs)
-The Claude Code plugin lives in [`npm/claude/`](npm/claude/README.md). It is implemented and covered by automated tests, including an end-to-end run of the real hook commands against recorded payloads. It has **not yet been verified in a live Claude Code session**. The plugin needs no Node.js: hooks run a small shell launcher, and hook stdout is always empty, which Claude Code documents as a no-op.
+The Claude Code plugin lives in [`npm/claude/`](npm/claude/README.md). It is implemented and covered by automated tests, including an end-to-end run of the real hook commands against recorded payloads. In a live Claude Code session (loaded with `claude --plugin-dir npm/claude`), `task_started`, `task_finished`, `permission_requested`, `waiting_for_user`, and `error` for a failed tool were heard. The `/agent-sfx:sfx` skill, custom sounds and fallback, and the silent `SessionStart` are covered by automated tests but not yet confirmed live. The plugin needs no Node.js: hooks run a small shell launcher, and hook stdout is always empty, which Claude Code documents as a no-op.
 
 | Claude Hook Event | Payload Match Condition | SFX Event | Verification & Semantics |
 | :--- | :--- | :--- | :--- |
@@ -126,7 +126,13 @@ Link the deployed user-wide extension into Gemini CLI:
   ```
 
 #### Claude Code
-Recommended (macOS): build the plugin in place and try it for one session without installing anything. See [`npm/claude/README.md`](npm/claude/README.md):
+Recommended (macOS): install from GitHub. No clone or build needed. Beginner guide: [`docs/install-claude-code.md`](docs/install-claude-code.md).
+```bash
+claude plugin marketplace add mohammedfalahi/agent-sfx
+claude plugin install agent-sfx@agent-sfx
+```
+
+For development, rebuild the plugin binaries and try it for one session without installing anything. See [`npm/claude/README.md`](npm/claude/README.md):
 ```bash
 scripts/build-claude-plugin.sh
 claude --plugin-dir npm/claude
@@ -411,7 +417,7 @@ node npm/test_launcher.js
 ### Specific Platform Limitations:
 1. **Windows Gemini Manual Hook Auto-Installation**: `agent-sfx install gemini` is currently blocked on Windows (`ErrWindowsUnsupported`). Use the recommended Gemini extension link (`gemini extensions link`) instead.
 2. **Windows Physical Audio Playback**: While `agent-sfx.exe`, named-pipe IPC, and PowerShell `SoundPlayer` command generation pass automated unit suites, physical sound output and lock contention remain pending runtime testing on physical Windows hardware.
-3. **Claude Code Live Verification**: The plugin hooks, launcher, and skill pass automated tests, including an end-to-end run of the real `hooks.json` commands. Hooks firing in a live Claude Code session, audible playback, and the `/agent-sfx:sfx` skill are not yet verified. The Claude plugin targets macOS only.
+3. **Claude Code Live Verification**: The plugin hooks, launcher, and skill pass automated tests, including an end-to-end run of the real `hooks.json` commands. Live, with `claude --plugin-dir npm/claude`: `task_started`, `task_finished`, `permission_requested`, `waiting_for_user`, and `error` for a failed tool were heard. The `/agent-sfx:sfx` skill, custom sounds and fallback, the silent `SessionStart`, and a live session after a GitHub install are not yet verified live. `StopFailure` is deliberately tested only with recorded payloads. The Claude plugin targets macOS only.
 
 ---
 
