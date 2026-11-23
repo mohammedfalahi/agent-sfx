@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"agent-sfx/internal/audio"
 	"agent-sfx/internal/config"
@@ -28,6 +29,7 @@ type Result struct {
 	DurationMS int64            `json:"duration_ms"`
 	Skipped    bool             `json:"skipped"`
 	SkipReason string           `json:"skip_reason,omitempty"`
+	Warning    string           `json:"warning,omitempty"`
 }
 
 // Runner coordinates configuration, sound selection, volume scaling, and player execution.
@@ -37,8 +39,9 @@ type Runner struct {
 	Cache     *audio.Cache
 	Selector  *sounds.Selector
 	SoundsDir string
-	// FallbackSoundsDir is consulted only for events that have no WAV files in
-	// SoundsDir (typically the bundled starter sounds). Optional.
+	// FallbackSoundsDir is consulted for events that have no sound files in
+	// SoundsDir, or whose chosen file can't be played (typically the bundled
+	// starter sounds). Optional.
 	FallbackSoundsDir string
 }
 
@@ -147,20 +150,21 @@ func (r *Runner) Preview(ctx context.Context, kind events.EventKind) (*Result, e
 		return nil, fmt.Errorf("sound selection failed for %s: %w", kind, err)
 	}
 
-	info, err := audio.ValidateWAVFile(chosenSound)
-	if err != nil {
-		return nil, fmt.Errorf("selected sound file %s is invalid: %w", chosenSound, err)
+	// Convert (non-WAV), validate, enforce max_clip_ms, and scale volume.
+	scaledPath, info, err := r.Cache.Prepare(chosenSound, r.Cfg.Volume, r.Cfg.MaxClipMS)
+	var warning string
+	if err != nil && r.FallbackSoundsDir != "" && !isWithin(chosenSound, r.FallbackSoundsDir) {
+		// Same rule as the worker: an unplayable user sound falls back to the
+		// bundled sound. Preview says so, because the user is testing it.
+		alt, selErr := r.Selector.SelectSoundFromDirs(kind, r.FallbackSoundsDir)
+		if selErr == nil {
+			warning = fmt.Sprintf("your sound %s can't be played (%v); played the built-in sound instead", chosenSound, err)
+			chosenSound = alt
+			scaledPath, info, err = r.Cache.Prepare(alt, r.Cfg.Volume, r.Cfg.MaxClipMS)
+		}
 	}
-
-	// 1. Validate actual PCM duration against configured max_clip_ms
-	if err := info.ValidateClipDuration(r.Cfg.MaxClipMS); err != nil {
-		return nil, fmt.Errorf("selected sound %s exceeds maximum duration: %w", chosenSound, err)
-	}
-
-	// 2. Scale volume
-	scaledPath, err := r.Cache.GetOrScale(chosenSound, r.Cfg.Volume)
 	if err != nil {
-		return nil, fmt.Errorf("volume scaling failed for %s: %w", chosenSound, err)
+		return nil, fmt.Errorf("selected sound %s can't be played: %w", chosenSound, err)
 	}
 
 	// 3. Apply shared process execution timeout: actual clip duration + 5s overhead
@@ -180,5 +184,12 @@ func (r *Runner) Preview(ctx context.Context, kind events.EventKind) (*Result, e
 		Player:     r.Player.BackendName(),
 		DurationMS: info.DurationMS,
 		Skipped:    false,
+		Warning:    warning,
 	}, nil
+}
+
+// isWithin reports whether path is inside dir.
+func isWithin(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

@@ -55,7 +55,7 @@ Then start a new Claude Code session. Step-by-step guide with live tests: [`docs
 Uninstall:
 
 ```bash
-"$HOME/.claude/plugins/cache/agent-sfx/agent-sfx/0.1.0/runtime/agent-sfx" worker stop
+"$HOME/.claude/plugins/cache/agent-sfx/agent-sfx/0.2.0/runtime/agent-sfx" worker stop
 claude plugin uninstall agent-sfx@agent-sfx
 claude plugin marketplace remove agent-sfx
 ```
@@ -79,18 +79,20 @@ Uninstall with `claude plugin uninstall agent-sfx@agent-sfx-local`, then `claude
 
 ## Your own sounds
 
-Put WAV files in your sounds folder, one subfolder per event:
+Put sound files in your sounds folder, one subfolder per event. MP3, AAC (`.m4a`, `.aac`), AIFF, CAF, and 16-bit WAV all work:
 
 ```text
 ~/Library/Application Support/agent-sfx/sounds/
-  task_finished/   my-clip.wav  another.wav
-  error/           oops.wav
+  task_finished/   my-clip.mp3  another.wav
+  error/           oops.m4a
 ```
 
 - When an event has several files, one is picked at random, never the same one twice in a row.
 - An event whose folder is empty or missing falls back to the plugin's bundled sound, so you can customize just one event.
+- A file that can't be played (damaged, unsupported, or too long) also falls back to the bundled sound. `doctor` names the file and the reason.
+- Non-WAV files are converted once with macOS's `/usr/bin/afconvert` into `~/Library/Caches/agent-sfx/cache`. Originals are never changed, and a replaced file is converted again.
 - To use a different folder, set `sounds_dir` in `~/Library/Application Support/agent-sfx/config.json`.
-- Files must be uncompressed 16-bit PCM WAV, at most 15 seconds and 25 MiB. Other formats are skipped.
+- Every sound must be at most 15 seconds and 25 MiB. OGG, FLAC, and non-16-bit WAV aren't supported.
 - Long clips mean more skipped sounds, because nothing else plays until a clip finishes.
 - You're responsible for having the rights to sounds you add.
 

@@ -19,7 +19,7 @@ import (
 
 // AppVersion is the release version; keep it in sync with the plugin and
 // extension manifests (checked by internal/packaging tests).
-const AppVersion = "0.1.0-dev"
+const AppVersion = "0.2.0"
 
 type AudioReport struct {
 	BackendName string `json:"backend_name"`
@@ -133,7 +133,8 @@ func GenerateReport(customConfigPath, customSoundsDir string) Report {
 	}
 
 	// 4. Cache
-	if cache, err := audio.NewCache(""); err == nil {
+	cache, cacheErr := audio.NewCache("")
+	if cacheErr == nil {
 		rep.CacheDir = cache.Dir()
 	}
 
@@ -151,13 +152,13 @@ func GenerateReport(customConfigPath, customSoundsDir string) Report {
 
 		if err != nil || len(wavs) == 0 {
 			reportItem.Valid = false
-			rep.Issues = append(rep.Issues, fmt.Sprintf("Assets: no WAV files found for event %s in %s", k, resolvedSounds))
+			rep.Issues = append(rep.Issues, fmt.Sprintf("Assets: no sound files found for event %s in %s", k, resolvedSounds))
 		} else {
 			for _, w := range wavs {
 				reportItem.Files = append(reportItem.Files, filepath.Base(w))
-				if _, valErr := audio.ValidateWAVFile(w); valErr != nil {
+				if valErr := checkSoundFile(cache, w, cfg.MaxClipMS); valErr != nil {
 					reportItem.Valid = false
-					rep.Issues = append(rep.Issues, fmt.Sprintf("Assets: file %s is invalid: %v", w, valErr))
+					rep.Issues = append(rep.Issues, fmt.Sprintf("Assets: file %s can't be played: %v", w, valErr))
 				}
 			}
 		}
@@ -239,4 +240,22 @@ func (r *Report) FormatJSON() (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+// checkSoundFile reports why a sound file can't be played: non-WAV files are
+// converted (and cached) the way the worker would, then validated.
+func checkSoundFile(cache *audio.Cache, path string, maxClipMS int) error {
+	wavPath := path
+	if cache != nil {
+		p, err := cache.ToWAV(path)
+		if err != nil {
+			return err
+		}
+		wavPath = p
+	}
+	info, err := audio.ValidateWAVFile(wavPath)
+	if err != nil {
+		return err
+	}
+	return info.ValidateClipDuration(maxClipMS)
 }

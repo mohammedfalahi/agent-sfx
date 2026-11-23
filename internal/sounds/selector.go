@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"agent-sfx/internal/audio"
 	"agent-sfx/internal/events"
 )
 
@@ -58,7 +59,9 @@ func NewSelector(rng RandSource) *Selector {
 	}
 }
 
-// ListEventSounds returns all .wav files located directly in <baseDir>/<eventKind>/.
+// ListEventSounds returns the usable sound files located directly in
+// <baseDir>/<eventKind>/: .wav everywhere, plus formats that can be converted
+// on this system (MP3, AAC/M4A, AIFF, CAF on macOS). Hidden files are skipped.
 func ListEventSounds(baseDir string, kind events.EventKind) ([]string, error) {
 	eventDir := filepath.Join(baseDir, string(kind))
 	entries, err := os.ReadDir(eventDir)
@@ -75,7 +78,7 @@ func ListEventSounds(baseDir string, kind events.EventKind) ([]string, error) {
 			continue
 		}
 		name := e.Name()
-		if strings.HasSuffix(strings.ToLower(name), ".wav") {
+		if !strings.HasPrefix(name, ".") && audio.IsSupportedSoundFile(name) {
 			wavs = append(wavs, filepath.Join(eventDir, name))
 		}
 	}

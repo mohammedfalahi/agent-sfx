@@ -19,7 +19,7 @@ Agent SFX is a fast, local-only command-line accessory that provides distinct au
 - **Dedicated Worker Daemon**: Playback runs asynchronously in a detached singleton background process acquired via OS-level file locking (`flock` on Unix, `LockFileEx` on Windows), preventing terminal audio lag.
 - **Strict Non-Preemptive Scheduling**: At most one sound plays at any time. Rapid subsequent events are dropped immediately rather than queued into stale backlogs, with a configurable global cooldown (1,200 ms default).
 - **Safe Child Execution**: All child processes use direct operating system argument arrays—zero shell string interpolation. Windows playback uses a fixed PowerShell script with hidden console windows (`CREATE_NO_WINDOW`) and environment variable path passing.
-- **Audio Guardrails**: Enforces 16-bit uncompressed PCM WAV validation, a 25 MiB maximum file size, and a strict 15-second (`15000` ms) hard duration ceiling.
+- **Audio Guardrails**: Enforces 16-bit PCM WAV validation (MP3, AAC, AIFF, and CAF are converted to WAV first on macOS), a 25 MiB maximum file size, and a strict 15-second (`15000` ms) hard duration ceiling.
 - **100% CC0 Starter Sounds**: Bundles seven original, mathematically synthesized sound assets dedicated to the public domain under Creative Commons CC0 1.0 Universal. Users can easily drop in custom WAV audio files.
 
 ---
@@ -302,9 +302,9 @@ Custom WAV audio files (e.g. meme clips, brand audio, or custom chimes) placed i
   Copy-Item my-sound.wav "$env:LOCALAPPDATA\agent-sfx\sounds\task_finished\"
   ```
 
-*Rules: Must be uncompressed 16-bit PCM `.wav` format, maximum 25 MiB file size, and maximum 15 seconds duration. If multiple sounds exist in a folder, Agent SFX selects randomly without immediate repeats.*
+*Rules: 16-bit PCM `.wav` works on every platform. On macOS, `.mp3`, `.m4a`, `.aac`, `.aif`, `.aiff`, and `.caf` also work: they're converted once with the built-in `/usr/bin/afconvert` into the Agent SFX cache, and the originals are never changed. Every sound must be at most 25 MiB and 15 seconds long. If multiple sounds exist in a folder, Agent SFX selects randomly without immediate repeats.*
 
-*Your sounds always take priority over the bundled starter sounds. An event with no WAV files in your folder falls back to the bundled sound, so you can customize just one event. `agent-sfx status` shows which folders the worker is using.*
+*Your sounds always take priority over the bundled starter sounds. An event with no sound files in your folder, or whose chosen file can't be played, falls back to the bundled sound, so you can customize just one event. `agent-sfx doctor` names any file that can't be played and why, and `agent-sfx status` shows which folders the worker is using.*
 
 ---
 

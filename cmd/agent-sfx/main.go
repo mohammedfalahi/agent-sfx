@@ -184,6 +184,10 @@ func runPreview(args []string) {
 		os.Exit(1)
 	}
 
+	if result.Warning != "" {
+		fmt.Fprintf(os.Stderr, "[WARNING] %s\n", result.Warning)
+	}
+
 	relSound, _ := filepath.Rel(".", result.SoundPath)
 	if relSound == "" {
 		relSound = result.SoundPath

@@ -43,7 +43,7 @@ Agent SFX is designed to run locally alongside terminal coding agents (such as G
 - **Window Hiding**: On Windows, player and background worker processes set `CREATE_NO_WINDOW` and `CREATE_NEW_PROCESS_GROUP` to prevent visible terminal window flashes and isolate process signals.
 
 ### 4. Audio Asset & Resource Bounds
-- **Format Restrictions**: Supports only uncompressed 16-bit signed PCM WAV files. Compressed formats (e.g., MP3, OGG, AAC) are not parsed or executed.
+- **Format Restrictions**: Agent SFX itself parses only 16-bit signed PCM WAV (plain or `WAVE_FORMAT_EXTENSIBLE` with the PCM subformat). On macOS, `.mp3`, `.m4a`, `.aac`, `.aif`, `.aiff`, and `.caf` files are decoded by the operating system's own converter, `/usr/bin/afconvert`, which is run directly (no shell) with absolute file paths, a 15-second timeout, and a 25 MiB cap on both input and output. Its output goes into the Agent SFX cache and passes the same WAV validation before playback. No other formats are decoded, and nothing is converted on Windows or Linux.
 - **File Size Ceiling**: Audio files are defensively capped at 25 MiB.
 - **Duration Ceiling**: Playback duration is bounded by a hard maximum of 15,000 ms (15 seconds). Any clip exceeding the configured duration limit is rejected before playback.
 - **Playback Timeout**: Process execution timeouts grant actual audio duration plus a fixed 5-second headroom to absorb OS audio subsystem latency, terminating unresponsive child players.
@@ -63,4 +63,4 @@ Agent SFX is designed to run locally alongside terminal coding agents (such as G
 1. **User Boundary Trust**: Agent SFX assumes the local operating system user account is trusted. Any malicious software running under the same user privileges can interact with the user's local socket or named pipe.
 2. **Audio Backend Reliance**: Agent SFX relies on native operating system tools (`afplay` on macOS, `powershell.exe` on Windows, `pw-play`/`paplay`/`aplay` on Linux). Vulnerabilities in these OS-provided utilities are outside the scope of this project.
 3. **Filesystem Atomicity on Windows**: While configuration replacement uses Windows `MoveFileEx(..., MOVEFILE_REPLACE_EXISTING)`, NTFS does not provide transactional power-loss atomicity equivalent to POSIX renames.
-4. **Third-Party Sound Files**: Users may place arbitrary WAV files in their local sounds directory. While Agent SFX rigorously validates WAV headers, chunk sizes, and PCM sample depths, users should only add audio assets from trusted sources.
+4. **Third-Party Sound Files**: Users may place arbitrary sound files in their local sounds directory. Agent SFX validates WAV headers, chunk sizes, and PCM sample depths, and on macOS relies on the system decoder (`afconvert`) for compressed formats, so a malformed MP3 or AAC file is handled by Apple's audio framework. Users should only add audio assets from trusted sources.

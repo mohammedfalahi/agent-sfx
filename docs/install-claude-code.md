@@ -6,7 +6,7 @@ This guide takes you from nothing installed to hearing your own custom sounds.
 
 ---
 
-## Install status (checked 2026-11-22)
+## Install status (checked 2026-11-23)
 
 Each step below is marked:
 
@@ -15,10 +15,10 @@ Each step below is marked:
 
 What has been tested so far:
 
-- **Installing, listing, and uninstalling** with the commands in this guide worked in a clean, throwaway Claude Code setup. The plugin was installed from a copy of the repository served the same way GitHub serves it: Claude Code cloned the repository with git. The installed copy kept its program files and permissions, and Claude Code listed its 7 hooks and the `/agent-sfx:sfx` command.
-- **The installed hooks** were run against recorded Claude Code events. Each event produced the right sound event, with the plugin's built-in sounds.
+- **Installing from GitHub, listing, and uninstalling** with the commands in this guide worked in a clean, throwaway Claude Code setup, using the real `mohammedfalahi/agent-sfx` repository. The installed copy kept its program files and permissions, and Claude Code listed its 7 hooks and the `/agent-sfx:sfx` command.
+- **The hooks installed from GitHub** were run against recorded Claude Code events. Each event produced the right sound event, with the plugin's built-in sounds.
 - **Sounds in a live Claude Code session:** the maintainer heard `task_started`, `task_finished`, `permission_requested`, `waiting_for_user`, and `error` for a failed tool, with the plugin loaded from a local copy (`claude --plugin-dir npm/claude`), not installed from GitHub.
-- **Not yet tested live:** the `/agent-sfx:sfx` command, custom sounds and fallback, the silent session start, and the install directly from GitHub followed by a live session.
+- **Not yet tested live:** the `/agent-sfx:sfx` command, custom sounds and fallback, the silent session start, and a live session after installing from GitHub.
 
 ---
 
@@ -69,7 +69,7 @@ A **marketplace** is a list of plugins that Claude Code knows where to download 
 
 ### Option A: from Terminal (recommended)
 
-**Step 1. Add the marketplace.** ✅ *(tested from a git copy of the repository; 🧪 directly from GitHub)*
+**Step 1. Add the marketplace.** ✅
 
 ```bash
 claude plugin marketplace add mohammedfalahi/agent-sfx
@@ -91,7 +91,7 @@ This downloads the plugin and turns it on for every project on your Mac (Claude 
 claude plugin list
 ```
 
-Look for `agent-sfx@agent-sfx` in the list, with `Version: 0.1.0` and `Status: ✔ enabled`. Plugins are enabled as soon as they're installed. If it shows as disabled, run:
+Look for `agent-sfx@agent-sfx` in the list, with `Version: 0.2.0` and `Status: ✔ enabled`. Plugins are enabled as soon as they're installed. If it shows as disabled, run:
 
 ```bash
 claude plugin enable agent-sfx@agent-sfx
@@ -146,12 +146,12 @@ Your on/off choice is saved, so it stays in effect in future sessions and for th
 The plugin's program lives inside Claude Code's plugin folder. To avoid typing the long path every time, save it in a shortcut variable for this Terminal window:
 
 ```bash
-SFX="$HOME/.claude/plugins/cache/agent-sfx/agent-sfx/0.1.0/runtime/agent-sfx"
+SFX="$HOME/.claude/plugins/cache/agent-sfx/agent-sfx/0.2.0/runtime/agent-sfx"
 ```
 
 Status: ✅ *(this is where the test install put it; `status`, `on`, `off`, and `worker stop` were run from there)*
 
-If you get `no such file or directory`, the version number may have changed after an update. Run `claude plugin list`, and put the version it shows in place of `0.1.0`.
+If you get `no such file or directory`, the version number may have changed after an update. Run `claude plugin list`, and put the version it shows in place of `0.2.0`.
 
 Then:
 
@@ -192,30 +192,27 @@ mkdir -p agent-sfx/sounds/task_started agent-sfx/sounds/task_finished agent-sfx/
 open agent-sfx/sounds
 ```
 
-Now drag your sound files into the right subfolders in Finder.
+Now drag your sound files into the right subfolders in Finder. MP3s work as they are; there's no need to convert them.
 
-### Supported format ✅
+### Supported formats ✅
 
-Agent SFX checks every file strictly. A file plays only if it is all of these:
+You can use any of these. There's nothing to convert:
 
-- A **`.wav`** file
-- **Uncompressed 16-bit PCM** (the plain, classic kind of WAV)
-- **Mono or stereo**
-- **15 seconds or shorter**, and **25 MB or smaller**
+| Format | File endings |
+| --- | --- |
+| MP3 | `.mp3` |
+| AAC | `.m4a`, `.aac` |
+| AIFF | `.aif`, `.aiff` |
+| Core Audio | `.caf` |
+| WAV (16-bit) | `.wav` |
 
-MP3, M4A, AAC, AIFF, 24-bit or 32-bit WAV, and "extensible" WAV files are **not** played.
+Every sound must also be **15 seconds or shorter**, and the file **25 MB or smaller**. Mono or stereo both work.
 
-**Converting a file:** if you have the free `ffmpeg` tool, this converts almost anything into the right format:
+**How it works:** the first time Agent SFX plays a non-WAV sound, it converts a copy to WAV with macOS's built-in converter (`afconvert`). It keeps that copy in `~/Library/Caches/agent-sfx/cache`, so later plays are instant. Your original files are never changed, and no extra files appear in your sounds folders.
 
-```bash
-ffmpeg -i my-sound.mp3 -c:a pcm_s16le my-sound.wav
-```
+✅ *Checked with real MP3 and AAC files, through `preview` and through the background helper.*
 
-✅ *Checked: the output is plain 16-bit PCM WAV.*
-
-> **Don't use macOS's built-in `afconvert` for this.** It produces an "extensible" WAV, which Agent SFX rejects, so the event goes silent. ✅ *Checked.*
-
-If you prefer a free app, Audacity can export **WAV, signed 16-bit PCM** (🧪 not checked).
+**Not supported:** OGG, FLAC, and WAV files that aren't 16-bit (for example 24-bit or 32-bit float). Files with other endings are ignored. To use one of those, convert it to MP3 or WAV first, for example with the free `ffmpeg` tool: `ffmpeg -i my-sound.flac my-sound.mp3`.
 
 **Keep sounds short.** Only one sound plays at a time, and any event that happens while a sound is playing is skipped. Clips under a second work best.
 
@@ -223,7 +220,8 @@ If you prefer a free app, Audacity can export **WAV, signed 16-bit PCM** (🧪 n
 
 - **More than one file in a folder:** Agent SFX picks one at random each time, and never plays the same one twice in a row.
 - **Empty or missing folder:** that event uses the plugin's built-in sound. So you can customize just one event (for example, only `task_finished`) and keep the built-in sounds for the rest.
-- **A file in the wrong format:** that event goes **silent**. It does *not* fall back to the built-in sound. If a custom sound never plays, check the format first.
+- **A file that can't be played** (a damaged file, the wrong kind of WAV, or longer than 15 seconds): that event plays the **built-in sound** instead. If you keep hearing the built-in sound after adding your own, run `"$SFX" doctor`. It names the file and says why it can't be played.
+- **Hidden files** (names starting with `.`) are ignored.
 
 ### Make Agent SFX notice a brand-new sounds folder ✅
 
@@ -232,7 +230,7 @@ The background helper picks its sounds folder when it starts. If `~/Library/Appl
 1. Stop the helper: `"$SFX" worker stop`
 2. Quit Claude Code and start a new session. The helper restarts by itself.
 
-After that, adding or removing files takes effect right away. If you **replace** a file, give the new one a new name so an old copy isn't reused.
+After that, adding, removing, or replacing files takes effect right away. A replaced file is converted again automatically.
 
 `"$SFX" status` shows which sounds folder the helper is using.
 
@@ -344,7 +342,7 @@ This deletes the test folder and the empty folder created in test 3. Only run it
 | An error mentioning **"supports macOS only"** | You're not on a Mac. The Claude Code plugin works only on macOS. |
 | `marketplace add` says **"Marketplace file not found"** | GitHub has an older copy of the project without the plugin list. Wait for the maintainer to publish it, then try again. |
 | `marketplace add` says the marketplace **already exists** | You added it before. Skip to step 2, or run `claude plugin marketplace update agent-sfx`. |
-| **One specific custom sound never plays** | The file is probably the wrong format (see [Supported format](#supported-format-)). Convert it with `ffmpeg`. Wrong-format files make that event silent. |
+| **You hear the built-in sound instead of yours** | Your file can't be played. Run `"$SFX" doctor`: it lists the file and the reason, such as a damaged file, an unsupported format, or a clip longer than 15 seconds. `"$SFX" preview <event>` shows the same warning. See [Supported formats](#supported-formats-). |
 | **Custom sounds ignored; built-in ones still play** | The helper started before your sounds folder existed. Run `"$SFX" worker stop`, then start a new Claude Code session. Check the folder names are spelled exactly right. |
 | **Some sounds are skipped** | That's the 1.2-second quiet gap and 5-second no-repeat rule. Use shorter clips, or lower `cooldown_ms` in `config.json`. |
 | **No permission sound** | Claude didn't actually ask, because of auto-accept, bypass mode, or a saved "always allow" rule. |
@@ -417,12 +415,12 @@ To turn the plugin off for **just one project** without uninstalling, add this t
 - One sound at a time. Events during a sound or the 1.2-second gap afterwards are skipped, not queued.
 - The same sound won't repeat within 5 seconds in the same session.
 - No finish sound when you interrupt Claude with `Esc`, and no error sound when you cancel a command.
-- Custom sounds must be 16-bit PCM WAV files. Other formats make that event silent instead of falling back.
+- Custom sounds can be MP3, AAC (`.m4a`, `.aac`), AIFF, CAF, or 16-bit WAV. OGG, FLAC, and 24-bit or 32-bit WAV aren't supported; a file that can't be played falls back to the built-in sound.
 - The `/agent-sfx:sfx` controls need you to approve one shell command each time.
 
 **Not yet verified**
 
-- Installing directly from GitHub, followed by a live session.
+- A live session after installing from GitHub. (The install itself is verified.)
 - In a live session: the `/agent-sfx:sfx` controls, custom sounds and fallback to the built-in sounds, and the silent session start. (These were checked with automated tests and recorded events only.)
 - The `error` sound for API errors (`StopFailure`). This is deliberately tested only with recorded examples.
 - Installing from inside Claude Code with `/plugin install`, instead of from Terminal.
@@ -440,5 +438,5 @@ GitHub install works when all of these are true on `master`:
 For every release:
 
 1. Run `scripts/build-claude-plugin.sh` and commit the two binaries. The build is reproducible: unchanged source and the same Go version give identical files, so binaries only show up in the diff when the code changed.
-2. Bump `version` in `npm/claude/.claude-plugin/plugin.json`, in both `marketplace.json` files, and in `AppVersion` (`internal/doctor/doctor.go`). Claude Code treats a pinned version as unchanged across commits, so `claude plugin update` won't deliver new code until the number changes. Update the `0.1.0` in this guide's `SFX` path too.
+2. Bump `version` in `npm/claude/.claude-plugin/plugin.json`, in both `marketplace.json` files, and in `AppVersion` (`internal/doctor/doctor.go`). Claude Code treats a pinned version as unchanged across commits, so `claude plugin update` won't deliver new code until the number changes. Update the version number in this guide's `SFX` path and in `npm/claude/README.md` too.
 3. Run `go test ./...` (`internal/packaging` checks that the manifests agree, that the binaries are present, executable, not ignored by git, and report the plugin version), then `claude plugin validate .` and `claude plugin validate ./npm/claude`.

@@ -220,7 +220,7 @@ Your configured `sounds_dir` in `config.json` is always preserved. To add custom
   Copy-Item my-sound.wav "$env:LOCALAPPDATA\agent-sfx\sounds\task_finished\"
   ```
 
-*Sound rules: Must be uncompressed 16-bit PCM `.wav` format, maximum 25 MiB in file size, and maximum 15 seconds (15,000 ms) in duration. If multiple sounds exist in a folder, Agent SFX selects randomly without immediate repeats.*
+*Sound rules: 16-bit PCM `.wav` works everywhere; on macOS `.mp3`, `.m4a`, `.aac`, `.aif`, `.aiff`, and `.caf` also work (converted automatically with the built-in `afconvert`). Maximum 25 MiB in file size, and maximum 15 seconds (15,000 ms) in duration. If multiple sounds exist in a folder, Agent SFX selects randomly without immediate repeats.*
 
 ---
 

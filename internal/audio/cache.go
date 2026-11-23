@@ -14,9 +14,11 @@ const (
 	MaxCacheEntries = 100
 )
 
-// Cache manages cached volume-scaled WAV audio files.
+// Cache manages cached volume-scaled WAV files and WAVs converted from other
+// formats.
 type Cache struct {
-	dir string
+	dir       string
+	converter Converter // nil means the platform default (afconvert on macOS)
 }
 
 // NewCache returns a Cache using the given directory or the default OS cache directory.

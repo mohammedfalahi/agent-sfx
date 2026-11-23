@@ -110,7 +110,15 @@ func ValidateAndParseWAV(r io.ReaderAt, size int64) (*WAVInfo, error) {
 			}
 
 			audioFormat := binary.LittleEndian.Uint16(fmtData[0:2])
-			if audioFormat != 1 {
+			switch audioFormat {
+			case wavFormatPCM:
+			case wavFormatExtensible:
+				// WAVE_FORMAT_EXTENSIBLE (written by macOS afconvert and many
+				// editors) is accepted only when it wraps plain 16-bit PCM.
+				if err := validateExtensiblePCM(r, chunkDataOffset, chunkSize); err != nil {
+					return nil, err
+				}
+			default:
 				return nil, fmt.Errorf("unsupported audio format %d: only uncompressed PCM (format 1) is supported", audioFormat)
 			}
 
@@ -177,6 +185,37 @@ func ValidateAndParseWAV(r io.ReaderAt, size int64) (*WAVInfo, error) {
 	}
 
 	return &info, nil
+}
+
+const (
+	wavFormatPCM        = 0x0001
+	wavFormatExtensible = 0xFFFE
+)
+
+// ksDataFormatSubtypePCM is the subformat GUID that marks a
+// WAVE_FORMAT_EXTENSIBLE file as integer PCM.
+var ksDataFormatSubtypePCM = []byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00, 0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71}
+
+// validateExtensiblePCM checks the 22-byte extension of a WAVE_FORMAT_EXTENSIBLE
+// fmt chunk: it must declare the PCM subformat with 16 valid bits per sample.
+func validateExtensiblePCM(r io.ReaderAt, fmtOffset int64, fmtSize uint32) error {
+	if fmtSize < 40 {
+		return fmt.Errorf("extensible fmt chunk size %d is too small (need 40)", fmtSize)
+	}
+	ext := make([]byte, 24)
+	if _, err := r.ReadAt(ext, fmtOffset+16); err != nil {
+		return fmt.Errorf("failed to read extensible fmt chunk: %w", err)
+	}
+	if cbSize := binary.LittleEndian.Uint16(ext[0:2]); cbSize < 22 {
+		return fmt.Errorf("extensible fmt extension size %d is too small (need 22)", cbSize)
+	}
+	if valid := binary.LittleEndian.Uint16(ext[2:4]); valid != 16 {
+		return fmt.Errorf("unsupported valid bits per sample %d: only 16-bit PCM is supported", valid)
+	}
+	if !bytes.Equal(ext[8:24], ksDataFormatSubtypePCM) {
+		return errors.New("unsupported extensible subformat: only integer PCM is supported")
+	}
+	return nil
 }
 
 // ValidateWAVFile reads and validates a WAV file on disk.

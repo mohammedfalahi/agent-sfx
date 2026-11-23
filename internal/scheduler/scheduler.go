@@ -3,6 +3,8 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,7 +33,8 @@ type Scheduler struct {
 	cache     *audio.Cache
 	selector  *sounds.Selector
 	soundsDir string
-	// fallbackSoundsDir is used only for events with no WAVs in soundsDir.
+	// fallbackSoundsDir is used for events with no sound files in soundsDir,
+	// or whose chosen file can't be played.
 	fallbackSoundsDir string
 
 	playing       bool
@@ -295,17 +298,15 @@ func (s *Scheduler) playEvent(ev events.Event) {
 		return
 	}
 
-	info, err := audio.ValidateWAVFile(chosenSound)
-	if err != nil {
-		return
+	// Convert (non-WAV), validate, enforce max_clip_ms, and scale volume.
+	scaledPath, info, err := s.cache.Prepare(chosenSound, s.cfg.Volume, s.cfg.MaxClipMS)
+	if err != nil && fallback != "" && !inDir(chosenSound, fallback) {
+		// A user sound that can't be played (bad format, failed conversion,
+		// too long) falls back to the bundled sound instead of going silent.
+		if alt, selErr := s.selector.SelectSoundFromDirs(ev.Kind, fallback); selErr == nil {
+			scaledPath, info, err = s.cache.Prepare(alt, s.cfg.Volume, s.cfg.MaxClipMS)
+		}
 	}
-
-	// Validate actual PCM duration against configured max_clip_ms
-	if err := info.ValidateClipDuration(s.cfg.MaxClipMS); err != nil {
-		return
-	}
-
-	scaledPath, err := s.cache.GetOrScale(chosenSound, s.cfg.Volume)
 	if err != nil {
 		return
 	}
@@ -343,4 +344,10 @@ func (s *Scheduler) cleanOldDedupeEntries(now time.Time) {
 			delete(s.dedupeCache, k)
 		}
 	}
+}
+
+// inDir reports whether path is inside dir.
+func inDir(path, dir string) bool {
+	rel, err := filepath.Rel(dir, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
