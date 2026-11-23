@@ -437,6 +437,6 @@ GitHub install works when all of these are true on `master`:
 
 For every release:
 
-1. Run `scripts/build-claude-plugin.sh` and commit the two binaries. The build is reproducible: unchanged source and the same Go version give identical files, so binaries only show up in the diff when the code changed.
+1. Run `scripts/build-claude-plugin.sh` and `scripts/build-gemini-binaries.sh`, and commit the four binaries (the Gemini extension's live in `npm/bin/`; `internal/packaging` checks they report the version in `npm/gemini-extension.json` and `npm/package.json`, which you bump too). The build is reproducible: unchanged source and the same Go version give identical files, so binaries only show up in the diff when the code changed.
 2. Bump `version` in `npm/claude/.claude-plugin/plugin.json`, in both `marketplace.json` files, and in `AppVersion` (`internal/doctor/doctor.go`). Claude Code treats a pinned version as unchanged across commits, so `claude plugin update` won't deliver new code until the number changes. Update the version number in this guide's `SFX` path and in `npm/claude/README.md` too.
 3. Run `go test ./...` (`internal/packaging` checks that the manifests agree, that the binaries are present, executable, not ignored by git, and report the plugin version), then `claude plugin validate .` and `claude plugin validate ./npm/claude`.

@@ -167,7 +167,7 @@ Restart or open a new terminal session for Gemini CLI and Claude Code. On startu
 ### Step 6: Verify Active Integration
 Verify that both agents and the CLI shortcut are functioning:
 - **CLI Shortcut**: Run `which agent-sfx` (or `Get-Command agent-sfx` on Windows) followed by `agent-sfx doctor`.
-- **Gemini CLI**: Run `gemini extensions list` (should display `agent-sfx (0.1.0)` as linked and enabled).
+- **Gemini CLI**: Run `gemini extensions list` (should display `agent-sfx (0.2.0)` as linked and enabled).
 - **Claude Code**: Run `claude plugin list` (should display `agent-sfx@agent-sfx-local` under `Scope: user` as `✔ enabled`).
 
 ---
