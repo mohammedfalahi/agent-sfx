@@ -122,10 +122,12 @@ npm/claude/
 ├── hooks/hooks.json                hook registrations
 ├── skills/sfx/SKILL.md             optional /agent-sfx:sfx control skill
 ├── runtime/agent-sfx               POSIX sh launcher (picks the binary for this Mac)
-├── runtime/darwin-arm64/agent-sfx  built by scripts/build-claude-plugin.sh (committed)
-├── runtime/darwin-x64/agent-sfx    built by scripts/build-claude-plugin.sh (committed)
+├── runtime/darwin-arm64/agent-sfx  Go CLI binary for Apple Silicon Macs (committed)
+├── runtime/darwin-x64/agent-sfx    Go CLI binary for Intel Macs (committed)
 └── sounds/<event>/<event>.wav      the seven bundled starter sounds (CC0)
 ```
+
+The launcher selects the matching Go CLI binary. The binaries handle the plugin's hooks and the `/agent-sfx:sfx` controls. They are built from this repository's Go source by `scripts/build-claude-plugin.sh` and committed so GitHub installs need no build step.
 
 The launcher lives in `runtime/`, not `bin/`, because Claude Code adds a plugin's `bin/` folder to the Bash tool's PATH.
 
